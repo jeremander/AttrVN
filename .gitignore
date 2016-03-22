@@ -1,4 +1,10 @@
 gplus0_lcc/
+gplus0_sub_test/
+*.txt
+*.png
+*.out
+*.pickle
+*eigvals.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

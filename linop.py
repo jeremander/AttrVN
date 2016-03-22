@@ -237,13 +237,13 @@ class BlockSparseLinearOperator(SparseLinearOperator):
         return (self.block_grid,)
 
 class CollapseOperator(SparseLinearOperator):
-    """Given a mapping from [0 ... (n - 1)] to Pow([0 ... (m - 1)]), with m <= n, represents the m x n linear operator that sums together vector entries belonging to the same equivalence class under this mapping."""
+    """Given a mapping from [0 ... (n - 1)] to Pow([0 ... (m - 1)]), represents the m x n linear operator that sums together vector entries belonging to the same equivalence class under this mapping."""
     def __init__(self, mapping, m):
         """mapping is an n-long array of sets of integers in [0 ... (m - 1)]."""
         self.mapping = mapping
         self.m = m
         n = len(mapping)
-        assert (m <= n)
+        #assert (m <= n)
         assert (m > max((reduce(max, s, -1) for s in mapping)))
         assert (min(map(len, mapping)) > 0)
         mat = lil_matrix((m, n), dtype = float)

@@ -1,5 +1,6 @@
 import time
 import pickle
+import numpy as np
 import pandas as pd
 
 def time_format(seconds):
@@ -64,3 +65,23 @@ def save_object(obj, folder, obj_name, extension, verbose = True):
         pass
     if (not did_save):
         raise IOError("Failed to save %s to file." % obj_name)
+
+def configparser_items_to_params(items):
+    """Evaluate the found items (strings) from a ConfigParser. Strips away any commented material."""
+    params = {}
+    for (t, v) in items:    
+        v = v.partition('#')[0].strip()   
+        try:  # try to evaluate parameter
+            params[t] = eval(v)
+        except (NameError, SyntaxError):  # otherwise assume string
+            params[t] = v
+    return params   
+
+def normalize(vec):
+    """Normalizes a vector to have unit norm."""
+    return vec / np.linalg.norm(vec)
+
+def normalize_mat_rows(mat):
+    """Normalizes the rows of a matrix, in-place."""
+    for i in range(mat.shape[0]):
+        mat[i] = normalize(mat[i])

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from importlib import reload
 from collections import defaultdict
 from scipy.sparse.linalg import eigsh
@@ -20,8 +21,10 @@ def symmetrize_sparse_matrix(M):
     M = M.tocsr()
     return M + M.transpose().tocsr() - diags(M.diagonal(), offsets = 0).tocsr()
 
-def edgelist_to_sparse_adjacency_operator(filename):
+def edgelist_to_sparse_adjacency_operator(filename, verbose = True):
     """Takes a filename of an undirected edge list (space-separated pairs of vertices indexed from 0 to n - 1)."""
+    if verbose:
+        print("\nLoading edges from '%s'..." % filename)
     edges_dict = defaultdict(list)
     rows, cols = [], []
     num_edges = 0
@@ -45,7 +48,7 @@ def embed_symmetric_operator(A, embedding = 'adj', k = 50, tol = None, verbose =
     tol = 1.0 / n if (tol is None) else tol
     if verbose:
         matrix_type = 'adjacency' if (embedding == 'adj') else ('diagonal-added adjacency' if (embedding == 'diag+adj') else ('normalized Laplacian' if (embedding == 'normlap') else 'regularized normalized Laplacian'))
-        print("\t\tComputing k = %d eigenvectors of %d x %d %s matrix..." % (k, n, n, matrix_type))
+        print("\nComputing k = %d eigenvectors of %d x %d %s matrix..." % (k, n, n, matrix_type))
     if (embedding == 'adj'):
         (eigvals, features) = eigsh(A, k = k, tol = tol)
         features = np.sqrt(np.abs(eigvals)) * features  # scale the feature columns by the sqrt of the eigenvalues
@@ -59,6 +62,40 @@ def embed_symmetric_operator(A, embedding = 'adj', k = 50, tol = None, verbose =
         regnormlap = SparseRegularizedNormalizedLaplacian(A)
         (eigvals, features) = eigsh(regnormlap, k = k, tol = tol)
     return (eigvals, features)
+
+def get_elbows(x, n = 1, thresh = 0.0):
+    """Given array of decreasing abs(eigenvalues), computes the elbows of the scree plot. From Zhu and Ghodsi, "Automatic dimensionality selection from the scree plot via the use of profile likelihood," 2006."""
+    m = len(x)
+    assert (m > 2)
+    x = x[x >= thresh]
+    ll = -1000 * np.ones(m - 1)
+    for k in range(1, m):
+        mu1 = np.mean(x[:k])
+        mu2 = np.mean(x[k:])
+        sig2 = (k * np.sum((x[:k] - mu1) ** 2) + (len(x) - k) * np.sum((x[k:] - mu2) ** 2)) / (m - 2)
+        ll[k - 1] = -1 * (np.sum((x[:k] - mu1) ** 2) + np.sum((x[k:] - mu2) ** 2)) / (2 * sig2) - 0.5 * m * np.log(2 * np.pi * sig2)
+    elbows = list([ll.argmax()])
+    if ((n > 1) and ((elbows[0] + 1) < m)):
+        other_elbows = get_elbows(x[(elbows[0] + 1):], n = n - 1) + elbows[0] + 1
+        elbows += list(other_elbows)
+    return elbows
+
+def scree_plot(eigvals, elbow = None, show = True, filename = None):
+    """Makes a scree plot of the absolute value of a series of eigenvalues using matplotlib. If elbow is not None, draws a vertical line at this index. If show = True, displays the plot. If filename is not None, saves the plot to this filename."""
+    plt.figure()
+    abs_eigvals = np.abs(eigvals)
+    ranked_abs_eigvals = np.array(sorted(abs_eigvals, reverse = True))
+    plt.plot(ranked_abs_eigvals, linewidth = 3)
+    if (elbow is not None):
+        plt.axvline(x = elbow, linewidth = 2, color = 'red', linestyle = 'dashed')
+    plt.title('Scree plot of eigenvalues')
+    plt.xlabel('rank', labelpad = 10)
+    plt.ylabel('abs(eigenvalue)', labelpad = 15)
+    plt.ylim(ymin = 0)
+    if filename:
+        plt.savefig(filename)
+    if show:
+        plt.show(block = False)
 
 
 class PairwiseFreqAnalyzer(object):
@@ -148,7 +185,7 @@ class PairwiseFreqAnalyzer(object):
         mat = symmetrize_sparse_matrix(mat)
         return mat
     def to_sparse_sim_operator(self, sim = 'NPMI1s', delta = 0):
-        """Returns a LinearOperator object encoding the sparse + low-rank representation of the PMI similarity matrix. This can be used in place of an actual matrix in various computations. If sim != 'PMIs', can use an alternative formulation of PMI, but only if delta = 0."""
+        """Returns a SparseLinearOperator object encoding the sparse + low-rank representation of the PMI similarity matrix. This can be used in place of an actual matrix in various computations. If sim != 'PMIs', can use an alternative formulation of PMI, but only if delta = 0."""
         assert ((delta > 0) if (sim == 'PMIs') else (delta == 0))
         if (sim != 'PMIs'):  # just use the sparse similarity matrix with no smoothing
             csr_mat = self.to_sparse_sim_matrix(sim)
@@ -157,7 +194,7 @@ class PairwiseFreqAnalyzer(object):
         coo = self.freq_mat.tocoo()
         data = np.log(coo.data + delta) - log_delta
         F = coo_matrix((data, (coo.row, coo.col)), shape = (self.num_vocab, self.num_vocab)).tocsr()
-        F = F + F.transpose().tocsr() - diags(F.diagonal(), offsets = 0).tocsr()  # symmetrize the matrix
+        F = symmetrize_sparse_matrix(F)
         u = np.log(np.array([self.empirical_freq(self.vocab[i], delta = delta) for i in range(self.num_vocab)]))
         Delta = log_delta + np.log(self.total_edges + delta * self.num_possible_pairs)
         return PMILinearOperator(F, Delta, u)
@@ -174,107 +211,179 @@ class PairwiseFreqAnalyzer(object):
 
 
 class AttributeAnalyzer(object):
-    """Class for analyzing node attributes for various attribute types."""
-    def __init__(self, filename, attr_types, num_vertices):
-        self.filename = filename
-        self.attr_types = attr_types
-        self.num_vertices = num_vertices
-    def load_data(self):
-        node_attr_filename = self.folder + '/node_attributes.csv'
-        self.attr_df = pd.read_csv(node_attr_filename, sep = ';')
+    """Class for analyzing node attribute frequencies for various attribute types."""
+    def __init__(self, attr_filename, num_nodes, attr_types = None):
+        """Creates an AttributeAnalyzer object from a csv file (;-separated) of node attributes. If attr_types is a specified list, only includes these attribute types."""
+        self.num_nodes = num_nodes
+        self.attr_df = pd.read_csv(attr_filename, sep = ';')
         self.attr_df['attributeVal'] = self.attr_df['attributeVal'].astype(str)
+        self.attr_types = list(sorted(set(self.attr_df['attributeType'])))
+        if (attr_types is not None):
+            assert set(attr_types).issubset(self.attr_types)
+            self.attr_types = list(sorted(attr_types))
+        self.num_attr_types = len(self.attr_types)
+        self.attr_df = self.attr_df[np.vectorize(lambda t : t in set(self.attr_types))(self.attr_df['attributeType'])]
         self.attributed_nodes = sorted(list(set(self.attr_df['node'])))
-        self.attributed_nodes_to_rows = dict((node, row) for (row, node) in enumerate(self.attributed_nodes))
+        #self.attributed_nodes_to_rows = dict((node, row) for (row, node) in enumerate(self.attributed_nodes))
         self.attr_freqs_by_type = dict((t, defaultdict(int)) for t in self.attr_types)
-        self.annotated_attr_freqs_by_type = dict((t, defaultdict(int)) for t in self.attr_types)
         for (t, val) in zip(self.attr_df['attributeType'], self.attr_df['attributeVal']):
             self.attr_freqs_by_type[t][val] += 1
-            self.annotated_attr_freqs_by_type[t][self.attr_map[t](val)] += 1
         self.num_unique_attrs_by_type = dict((t, len(self.attr_freqs_by_type[t])) for t in self.attr_types)
         self.num_attr_instances_by_type = dict((t, sum(self.attr_freqs_by_type[t].values())) for t in self.attr_types)
         self.sorted_attr_freqs_by_type = dict((t, sorted(self.attr_freqs_by_type[t].items(), key = lambda pair : pair[1], reverse = True)) for t in self.attr_types)
-        self.sorted_annotated_attr_freqs_by_type = dict((t, sorted([item for item in self.annotated_attr_freqs_by_type[t].items() if (item[0] in self.annotated_attr_freqs_by_type[t])], key = lambda pair : pair[1], reverse = True)) for t in self.attr_types)
-        for t in self.attr_types:
-            self.sorted_annotated_attr_freqs_by_type[t] += [item for item in self.sorted_attr_freqs_by_type[t] if (item[0] not in self.attr_dicts[t])]
-            self.sorted_annotated_attr_freqs_by_type[t].sort(key = lambda pair : pair[1], reverse = True)
-    def attr_freq_df(self, rank_thresh = 100):
-        afdf = pd.DataFrame(columns = ['rank', 'freq', 'percentage', 'type', 'annotated'])
-        for annotated in [False, True]:
-            for t in self.attr_types:
-                df = pd.DataFrame(columns = afdf.columns)
-                df['rank'] = list(range(rank_thresh))
-                saf = self.sorted_annotated_attr_freqs_by_type[t] if annotated else self.sorted_attr_freqs_by_type[t]
-                df['freq'] = [pair[1] for pair in saf[:rank_thresh]]
-                df['percentage'] = 100 * np.cumsum(df['freq']) / self.num_attr_instances_by_type[t]
-                df['type'] = t
-                df['annotated'] = annotated
-                afdf = afdf.append(df)
-        return afdf
-    def rank_plot(self, rank_thresh = 100):
-        """Returns plot of the frequencies of the attributes, sorted by rank."""
-        afdf = self.attr_freq_df(rank_thresh)
-        return ggplot(aes(x = 'rank', y = 'freq', color = 'type', linetype = 'annotated'), data = afdf) + geom_line(size = 3) + ggtitle("Most frequent attributes by type") + xlab("rank") + xlim(low = -1, high = rank_thresh + 1) + ylab("") + scale_y_log10() + scale_x_continuous(breaks = range(0, int(1.05 * rank_thresh), rank_thresh // 5))
-    def cumulative_rank_plot(self, rank_thresh = 100):
-        """Returns plot showing the cumulative proportions covered by the attributes sorted by rank."""
-        afdf = self.attr_freq_df(rank_thresh)
-        return ggplot(aes(x = 'rank', y = 'percentage', color = 'type', linetype = 'annotated'), data = afdf) + geom_line(size = 3) + ggtitle("Cumulative percentage of most frequent attributes") + xlim(low = -1, high = rank_thresh + 1) + ylab("%") + scale_y_continuous(labels = range(0, 120, 20), limits = (0, 100)) + scale_x_continuous(breaks = range(0, int(1.05 * rank_thresh), rank_thresh // 5))
-    def load_pairwise_freq_analyzer(self, attr_type):
-        """Loads a PairwiseFreqAnalyzer if not already owned by the object."""
-        if (not hasattr(self, 'pairwise_freq_analyzers')):
-            self.pairwise_freq_analyzers = dict()
-        if (attr_type not in self.pairwise_freq_analyzers):
-            self.pairwise_freq_analyzers[attr_type] = load_object(self.folder, 'pairwise_freq_analyzer_%s' % attr_type, 'pickle')
-    def load_pairwise_freq_analyzers(self):
-        """Loads all PairwiseFreqAnalyzers."""
-        for attr_type in self.attr_types:
-            self.load_pairwise_freq_analyzer(attr_type)
-    def make_attrs_by_node_by_type(self, load = True, save = False):
-        self._attrs_by_node_by_type = dict((attr_type, defaultdict(set)) for attr_type in self.attr_types)
+        self.attrs_by_node_by_type = dict((attr_type, defaultdict(set)) for attr_type in self.attr_types)
         for (i, node, attr_type, attr_val) in self.attr_df.itertuples():
-                self._attrs_by_node_by_type[attr_type][node].add(attr_val)
-    def make_pairwise_freq_analyzers(self, load = True, save = False):
-        """Makes PairwiseFreqAnalyzer objects for each attribute type. These objects can be used to perform statistics on pairwise attribute counts and to compute pairwise similarity matrices between attributes."""
-        if (not hasattr(self, '_attrs_by_node_by_type')):
-            self.make_attrs_by_node_by_type()
-        self.pairwise_freq_analyzers = dict()
-        for attr_type in self.attr_types:
-            attrs_by_node = self._attrs_by_node_by_type[attr_type]
-            vocab = set()
-            for i in range(self.num_vertices):
-                if (i in attrs_by_node):
-                    vocab.update(attrs_by_node[i])
-                else:  # include unique unknown token for each unattributed node
-                    vocab.add('*???*_%d' % i)
-            vocab = sorted(list(vocab)) # sort alphabetically
-            self.pairwise_freq_analyzers[attr_type] = PairwiseFreqAnalyzer(vocab)
-        with open(self.folder + '/undirected_edges.dat', 'r') as f:
+                self.attrs_by_node_by_type[attr_type][node].add(attr_val)
+    def attr_freq_df(self, rank_thresh = 100):
+        afdf = pd.DataFrame(columns = ['rank', 'attrVal', 'freq', 'cumulative %', 'type'])
+        for t in self.attr_types:
+            df = pd.DataFrame(columns = afdf.columns)
+            df['rank'] = list(range(rank_thresh))
+            saf = self.sorted_attr_freqs_by_type[t]
+            df['attrVal'] = [pair[0] for pair in saf[:rank_thresh]]
+            df['freq'] = [pair[1] for pair in saf[:rank_thresh]]
+            df['cumulative %'] = 100 * np.cumsum(df['freq']) / self.num_attr_instances_by_type[t]
+            df['type'] = t
+            afdf = afdf.append(df)
+        return afdf
+    def rank_plot(self, rank_thresh = 100, show = True, filename = None):
+        """Returns plot of the frequencies of the attributes, sorted by rank."""
+        plt.figure()
+        afdf = self.attr_freq_df(rank_thresh)
+        cmap = plt.cm.gist_ncar
+        colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex = False, sharey = False, facecolor = 'white')
+        plots_for_legend = []
+        for (i, t) in enumerate(self.attr_types):
+            afdf_for_type = afdf[afdf['type'] == t]
+            plots_for_legend.append(ax1.plot(afdf_for_type['rank'], np.log10(afdf_for_type['freq']), color = colors[i], linewidth = 2)[0])
+            ax2.plot(afdf_for_type['rank'], afdf_for_type['cumulative %'], color = colors[i], linewidth = 2)
+        ax1.set_title('Attribute frequencies by type', fontweight = 'bold')
+        ax2.set_xlabel('rank')
+        ax1.set_ylabel('log10(freq)')
+        ax2.set_ylabel('cumulative %')
+        ax2.set_ylim((0, 100))
+        ax1.grid(True, 'major', color = 'w', linestyle = '-')
+        ax2.grid(True, 'major', color = 'w', linestyle = '-')
+        ax1.set_axisbelow(True)
+        ax2.set_axisbelow(True)
+        ax1.patch.set_facecolor('0.89')
+        ax2.patch.set_facecolor('0.89')
+        plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
+        if filename:
+            plt.savefig(filename)
+        if show:
+            plt.show(block = False)
+    def attr_report(self, rank_thresh = 100):
+        """Text string containing frequency info of each attr_type, and the list of top-ranked attribute values with their frequencies."""
+        pd.set_option('display.max_rows', rank_thresh)
+        afdf = self.attr_freq_df(rank_thresh)
+        s = ''
+        for t in self.attr_types:
+            typelen = len(t)
+            s += '#' * (typelen + 4) + '\n' + '# ' + t + ' #\n' + '#' * (typelen + 4) + '\n\n'
+            s += 'number of overall occurrences = %d\n' % self.num_attr_instances_by_type[t]
+            s += 'number of unique occurrences  = %d\n\n' % self.num_unique_attrs_by_type[t]
+            s += afdf[afdf['type'] == t][['rank', 'attrVal', 'freq', 'cumulative %']].to_string(index = False)
+            s += '\n\n'
+        return s
+    def make_pairwise_freq_analyzer(self, attr_type, edges_filename, verbose = True):
+        """Makes PairwiseFreqAnalyzer object for a given attribute type using edges from a given edge list filename. The PairwiseFreqAnalyzer object can be used to perform statistics on pairwise attribute counts and to compute pairwise similarity matrices between attributes."""
+        if verbose:
+            print("\nMaking PairwiseFreqAnalyzer for attribute type '%s' using edges from file '%s'..." % (attr_type, edges_filename))
+        attrs_by_node = self.attrs_by_node_by_type[attr_type]
+        vocab = set()
+        for i in range(self.num_nodes):
+            if (i in attrs_by_node):
+                vocab.update(attrs_by_node[i])
+            else:  # include unique unknown token for each unattributed node
+                vocab.add('*???*_%d' % i)
+        vocab = sorted(list(vocab)) # sort alphabetically
+        pfa = PairwiseFreqAnalyzer(vocab)
+        with open(edges_filename, 'r') as f:
             for (i, line) in enumerate(f):
-                if (i % 100000 == 0):
-                    print(i)
                 v1, v2 = [int(token) for token in line.split()[:2]]
-                for attr_type in self.attr_types:
-                    attrs_by_node = self.attrs_by_node_by_type[attr_type]
-                    if (v1 in attrs_by_node):
-                        if (v2 in attrs_by_node):
-                            for val1 in attrs_by_node[v1]:
-                                for val2 in attrs_by_node[v2]:
-                                    self.pairwise_freq_analyzers[attr_type].add_pair((val1, val2))
-                        else:
-                            for val1 in attrs_by_node[v1]:
-                                self.pairwise_freq_analyzers[attr_type].add_pair((val1, ('*???*_%d' % v2)))
-                    else:
-                        if (v2 in attrs_by_node):
+                if (v1 in attrs_by_node):
+                    if (v2 in attrs_by_node):
+                        for val1 in attrs_by_node[v1]:
                             for val2 in attrs_by_node[v2]:
-                                self.pairwise_freq_analyzers[attr_type].add_pair((('*???*_%d' % v1), val2))
-                        else:
-                            self.pairwise_freq_analyzers[attr_type].add_pair((('*???*_%d' % v1), ('*???*_%d' % v2)))
-        for attr_type in self.attr_types:
-           self.pairwise_freq_analyzers[attr_type].finalize_construction()
+                                pfa.add_pair((val1, val2))
+                    else:
+                        for val1 in attrs_by_node[v1]:
+                            pfa.add_pair((val1, ('*???*_%d' % v2)))
+                else:
+                    if (v2 in attrs_by_node):
+                        for val2 in attrs_by_node[v2]:
+                            pfa.add_pair((('*???*_%d' % v1), val2))
+                    else:
+                        pfa.add_pair((('*???*_%d' % v1), ('*???*_%d' % v2)))
+        pfa.finalize_construction()
+        return pfa
+    def make_uncollapsed_operator(self, pfa, attr_type, sim = 'NPMI1s', delta = 0.0, verbose = True):
+        """Given a PairwiseFreqAnalyzer for an attribute type, creates the uncollapsed SparseLinearOperator representing the attribute similarities. In this operator, node similarities are replicates of their corresponding attribute similarities (or the average of these, if multiple attributes occur). sim can be 'PMIs', 'NPMI1s', or 'conditional_prob'."""
+        attrs_by_node = self.attrs_by_node_by_type[attr_type]
+        if verbose:
+            print("\nMaking uncollapsed %s operator..." % sim)
+        attr_block = pfa.to_sparse_sim_operator(sim, delta)
+        mapping = []
+        for i in range(self.num_nodes):
+            if i in attrs_by_node:
+                mapping.append({pfa.vocab_indices[v] for v in attrs_by_node[i]})
+            else:
+                mapping.append({pfa.vocab_indices['*???*_%d' % i]})
+        collapser = CollapseOperator(np.array(mapping), pfa.num_vocab)
+        return SymmetricSparseLinearOperator(collapser.transpose() * (attr_block * collapser))
+    # def make_attr_embedding_matrix(self, attr_type, sim = 'NPMI1s', embedding = 'adj', delta = 0.0, k = 50, sphere = True, load = True, save = False):
+    #     """Makes matrix of feature embeddings for a given attribute type based on PMI similarities (saved off as matrix files). Rows are nodes, columns are features. Rows correspond to only the nodes that have at least one attribute."""
+    #     obj_name = '%s_%s_%s_delta%s_k%d%s_complete_embedding_matrix' % (attr_type, sim, embedding, str(delta), k, '_normalized' if sphere else '')
+    #     did_load = False
+    #     if load:
+    #         try:
+    #             if (not hasattr(self, 'attr_embedding_matrices')):
+    #                 self.attr_embedding_matrices = dict()
+    #             self.attr_embedding_matrices[attr_type] = load_object(self.folder, obj_name, 'pickle')
+    #             did_load = True
+    #         except:
+    #             print("\nCould not load %s from file." % obj_name)
+    #     if (not did_load):
+    #         feature_filename = self.folder + '/PMI/%s_%s_%s_delta%s_k%d_features.pickle' % (attr_type, sim, embedding, str(delta), k)
+    #         print("\nLoading features from %s..." % feature_filename)
+    #         feature_mat = pickle.load(open(feature_filename, 'rb'))
+    #         if sphere:
+    #             print("\nNormalizing feature vectors...")
+    #             normalize_mat_rows(feature_mat)
+    #         self.load_pairwise_freq_analyzer(attr_type)
+    #         pfa = self.pairwise_freq_analyzers[attr_type]
+    #         (attr_indices, attr_vocab) = get_attr_indices(pfa, self.attributed_nodes)
+    #         assert (len(attr_indices) == feature_mat.shape[0])  # confirm the features match
+    #         index_by_vocab = dict((v, i) for (i, v) in enumerate(attr_vocab))  # matrix indices for each attribute
+    #         mat = np.zeros((len(self.attributed_nodes), k), dtype = float)
+    #         attrs_by_node = self.attrs_by_node_by_type[attr_type]
+    #         ctr = 0
+    #         for i in range(self.num_nodes):
+    #             attrs = attrs_by_node[i]
+    #             if (len(attrs) > 0):
+    #                 row = np.zeros(k, dtype = float)  # compute average feature vector
+    #                 for attr in attrs:
+    #                     row += feature_mat[index_by_vocab[attr]]
+    #                 row /= len(attrs)
+    #             else:
+    #                 try:
+    #                     row = feature_mat[index_by_vocab['*???*_%d' % i]]
+    #                 except KeyError:
+    #                     continue
+    #             if sphere:
+    #                 row /= np.linalg.norm(row)  # normalize to sphere
+    #             mat[ctr] = row
+    #             ctr += 1
+    #         self.attr_embedding_matrices[attr_type] = mat
+    #     if (save and (not did_load)):
+    #         save_object(self.attr_embedding_matrices[attr_type], self.folder, obj_name, 'pickle')
     def get_attribute_indicator(self, attr, attr_type):
         """Given an attribute and its type, returns a Series of indicators for the graph vertices. 0 indicates the presence of the attribute, 1 indicates the presence of other attributes but not the given attribute, and nan indicates the lack of any attributes in that type."""
         attrs_by_node = self.attrs_by_node_by_type[attr_type]
-        ind = np.zeros(self.num_vertices, dtype = float)
-        for i in range(self.num_vertices):
+        ind = np.zeros(self.num_nodes, dtype = float)
+        for i in range(self.num_nodes):
             if (i in attrs_by_node):
                 attrs = attrs_by_node[i]
                 if (len(attrs) == 0):
@@ -284,115 +393,6 @@ class AttributeAnalyzer(object):
             else:
                 ind[i] = np.nan
         return pd.Series(ind)
-    def make_uncollapsed_operator(self, attr_type, sim = 'NPMI1s', delta = 0.0, load = True, save = False):
-        """Given an attribute type, creates the uncollapsed SparseLinearOperator for the attribute similarity operator. In this operator, node rows are replicates of their corresponding attribute rows in the attribute PMI matrix. sim can be 'PMIs', 'NPMIs', or 'prob'."""
-        filename = self.folder + '/PMI/%s_%s_delta%s_uncollapsed.pickle' % (attr_type, sim, str(delta))
-        if (not hasattr(self, 'uncollapsed_operators')):
-            self.uncollapsed_operators = dict()
-        did_load = False
-        if load:
-            try:
-                if (attr_type not in self.uncollapsed_operators):
-                    print_flush("\nLoading %s uncollapsed operator from file..." % attr_type)
-                    self.uncollapsed_operators[attr_type] = pickle.load(open(filename, 'rb'))
-                did_load = True
-            except:
-                print_flush("Could not load %s uncollapsed operator from file." % attr_type)
-        if (not did_load):
-            print_flush("Constructing from scratch...")
-            if ((not hasattr(self, 'pairwise_freq_analyzers')) or (attr_type not in self.pairwise_freq_analyzers)):
-                self.load_pairwise_freq_analyzer(attr_type)
-            pfa = self.pairwise_freq_analyzers[attr_type]
-            m = pfa.num_vocab
-            attrs_by_node = self.attrs_by_node_by_type[attr_type]
-            print_flush("\nMaking uncollapsed %s operator..." % sim)
-            if (sim == 'prob'):
-                attr_block = pfa.to_joint_prob_operator(delta)
-            else:
-                attr_block = pfa.to_sparse_PMI_operator(sim, delta)
-            mapping = []
-            for i in range(self.num_vertices):
-                if i in attrs_by_node:
-                    mapping.append({pfa.vocab_indices[v] for v in attrs_by_node[i]})
-                else:
-                    mapping.append({pfa.vocab_indices['*???*_%d' % i]})
-            collapser = CollapseOperator(np.array(mapping), m)
-            self.uncollapsed_operators[attr_type] = SymmetricSparseLinearOperator(collapser.transpose() * (attr_block * collapser))
-        if (save and (not did_load)):
-            print_flush("Saving...")
-            pickle.dump(self.uncollapsed_operators[attr_type], open(filename, 'wb'))
-    def make_random_walk_operator(self, attr_type, sim = 'NPMI1s', delta = 0.0, load = True, save = False):
-        """Given an attribute type, creates column-stochastic SparseLinearOperator for the attribute random walk matrix. This is the "uncollapsed" pairwise similarity operator. Options for sim are 'PMIs', 'NPMI1s', and 'prob'."""
-        filename = self.folder + '/PMI/%s_%s_delta%s_random_walk.pickle' % (attr_type, sim, str(delta))
-        if (not hasattr(self, 'random_walk_operators')):
-            self.random_walk_operators = dict()
-        did_load = False
-        if load:
-            try:
-                if (attr_type not in self.random_walk_operators):
-                    print_flush("\nLoading %s random walk operator from file..." % attr_type)
-                    self.random_walk_operators[attr_type] = pickle.load(open(filename, 'rb'))
-                did_load = True
-            except:
-                print_flush("Could not load %s random walk from file." % attr_type)
-        if (not did_load):
-            self.make_uncollapsed_operator(attr_type, sim = sim, delta = delta, load = load, save = False)
-            print_flush("Converting to stochastic matrix...")
-            self.random_walk_operators[attr_type] = self.uncollapsed_operators[attr_type].to_column_stochastic()
-        if (save and (not did_load)):
-            print_flush("Saving...")
-            pickle.dump(self.random_walk_operators[attr_type], open(filename, 'wb'))
-
-    def make_attr_embedding_matrix(self, attr_type, sim = 'NPMI1s', embedding = 'adj', delta = 0.0, k = 50, sphere = True, load = True, save = False):
-        """Makes matrix of feature embeddings for a given attribute type based on PMI similarities (saved off as matrix files). Rows are nodes, columns are features. Rows correspond to only the nodes that have at least one attribute."""
-        obj_name = '%s_%s_%s_delta%s_k%d%s_complete_embedding_matrix' % (attr_type, sim, embedding, str(delta), k, '_normalized' if sphere else '')
-        did_load = False
-        if load:
-            try:
-                if (not hasattr(self, 'attr_embedding_matrices')):
-                    self.attr_embedding_matrices = dict()
-                self.attr_embedding_matrices[attr_type] = load_object(self.folder, obj_name, 'pickle')
-                did_load = True
-            except:
-                print("\nCould not load %s from file." % obj_name)
-        if (not did_load):
-            feature_filename = self.folder + '/PMI/%s_%s_%s_delta%s_k%d_features.pickle' % (attr_type, sim, embedding, str(delta), k)
-            print("\nLoading features from %s..." % feature_filename)
-            feature_mat = pickle.load(open(feature_filename, 'rb'))
-            if sphere:
-                print("\nNormalizing feature vectors...")
-                normalize_mat_rows(feature_mat)
-            self.load_pairwise_freq_analyzer(attr_type)
-            pfa = self.pairwise_freq_analyzers[attr_type]
-            (attr_indices, attr_vocab) = get_attr_indices(pfa, self.attributed_nodes)
-            assert (len(attr_indices) == feature_mat.shape[0])  # confirm the features match
-            index_by_vocab = dict((v, i) for (i, v) in enumerate(attr_vocab))  # matrix indices for each attribute
-            mat = np.zeros((len(self.attributed_nodes), k), dtype = float)
-            attrs_by_node = self.attrs_by_node_by_type[attr_type]
-            ctr = 0
-            for i in range(self.num_vertices):
-                attrs = attrs_by_node[i]
-                if (len(attrs) > 0):
-                    row = np.zeros(k, dtype = float)  # compute average feature vector
-                    for attr in attrs:
-                        row += feature_mat[index_by_vocab[attr]]
-                    row /= len(attrs)
-                else:
-                    try:
-                        row = feature_mat[index_by_vocab['*???*_%d' % i]]
-                    except KeyError:
-                        continue
-                if sphere:
-                    row /= np.linalg.norm(row)  # normalize to sphere
-                mat[ctr] = row
-                ctr += 1
-            self.attr_embedding_matrices[attr_type] = mat
-        if (save and (not did_load)):
-            save_object(self.attr_embedding_matrices[attr_type], self.folder, obj_name, 'pickle')
-    def make_attr_embedding_matrices(self, sim = 'NPMI1s', embedding = 'adj', delta = 0.0, k = 50, sphere = True, load = True, save = False):
-        """Makes matrices of feature embeddings for all attribute types. Rows correspond to only the nodes that have at least one attribute."""
-        for attr_type in self.attr_types:
-            self.make_attr_embedding_matrix(attr_type, sim, embedding, delta, k, sphere, load, save)
     def get_attribute_sample(self, attr, attr_type, n):
         """Selects a random n nodes with the given attribute, and a random n nodes without it. Returns a triple of index lists: first the n with the attribute, then the n without it, then the remaining unselected nodes whose attribute status is known."""
         ind = self.get_attribute_indicator(attr, attr_type)
@@ -404,35 +404,20 @@ class AttributeAnalyzer(object):
         training_false = sorted(list(np.random.permutation(known_false)[:n]))
         test = sorted(list(set(known_true + known_false).difference(training_true).difference(training_false)))
         return (training_true, training_false, test)
-    def get_training_and_test(self, attr, attr_type, n):
-        """Selects an (n, n) training sample of nodes with/without the attribute, and a test set of the remainder. Returns a pair (features, outputs) for the both the training and test sets. Here the features are simply the counts of most common words & characters."""
-        assert hasattr(self, 'complete_feature_matrix')
-        (training_true, training_false, test) = self.get_attribute_sample(attr, attr_type, n)
-        training = sorted(training_true + training_false)
-        attr_indicator = self.get_attribute_indicator(attr, attr_type)
-        # get the column indices for the desired features
-        max_count_features = self.complete_feature_matrix.shape[1] // (2 * len(self.attr_types))
-        attr_type_index = self.attr_types.index(attr_type)
-        attr_cols = range(2 * max_count_features * attr_type_index, 2 * max_count_features * (attr_type_index + 1))
-        good_cols = sorted(list(set(range(self.complete_feature_matrix.shape[1])).difference(attr_cols)))
-        return ((self.complete_feature_matrix[training][:, good_cols], attr_indicator[training]), (self.complete_feature_matrix[test][:, good_cols], attr_indicator[test]))
-    def get_PMI_training_and_test(self, attr, attr_type, n):
-        """Selects an (n, n) training sample of nodes with/without the attribute, and a test set of the remainder. Returns a pair (features, outputs) for the both the training and test sets. Here features are derived from the embedding of PMI matrices for each attribute type."""
-        assert (hasattr(self, 'attr_embedding_matrices') and all([attr_type in self.attr_embedding_matrices.keys() for attr_type in self.attr_types]))
-        (training_true, training_false, test) = self.get_attribute_sample(attr, attr_type, n)
-        training = sorted(training_true + training_false)
-        training_rows = [self.attributed_nodes_to_rows[node] for node in training]
-        test_rows = [self.attributed_nodes_to_rows[node] for node in test]
-        attr_indicator = self.get_attribute_indicator(attr, attr_type)
-        training_blocks, test_blocks = [], []
-        for at in self.attr_types:
-            if (at != attr_type):  # exclude the attribute type of interest
-                training_blocks.append(self.attr_embedding_matrices[at][training_rows, :])
-                test_blocks.append(self.attr_embedding_matrices[at][test_rows, :])
-        return ((np.hstack(training_blocks), attr_indicator[training]), (np.hstack(test_blocks), attr_indicator[test]))
-    @classmethod
-    def from_data(cls, dataset = 'gplus0_lcc'):
-        """Loads in files listing the node attributes for each type. The first 500 are hand-annotated. Represents each attribute type as a dictionary mapping original attributes to annotated attributes (or None if not annotated)."""
-        return cls(dataset)
+    # def get_PMI_training_and_test(self, attr, attr_type, n):
+    #     """Selects an (n, n) training sample of nodes with/without the attribute, and a test set of the remainder. Returns a pair (features, outputs) for the both the training and test sets. Here features are derived from the embedding of PMI matrices for each attribute type."""
+    #     assert (hasattr(self, 'attr_embedding_matrices') and all([attr_type in self.attr_embedding_matrices.keys() for attr_type in self.attr_types]))
+    #     (training_true, training_false, test) = self.get_attribute_sample(attr, attr_type, n)
+    #     training = sorted(training_true + training_false)
+    #     training_rows = [self.attributed_nodes_to_rows[node] for node in training]
+    #     test_rows = [self.attributed_nodes_to_rows[node] for node in test]
+    #     attr_indicator = self.get_attribute_indicator(attr, attr_type)
+    #     training_blocks, test_blocks = [], []
+    #     for at in self.attr_types:
+    #         if (at != attr_type):  # exclude the attribute type of interest
+    #             training_blocks.append(self.attr_embedding_matrices[at][training_rows, :])
+    #             test_blocks.append(self.attr_embedding_matrices[at][test_rows, :])
+    #     return ((np.hstack(training_blocks), attr_indicator[training]), (np.hstack(test_blocks), attr_indicator[test]))
+
 
 
