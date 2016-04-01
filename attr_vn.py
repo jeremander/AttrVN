@@ -198,20 +198,10 @@ class PairwiseFreqAnalyzer(object):
         u = np.log(np.array([self.empirical_freq(self.vocab[i], delta = delta) for i in range(self.num_vocab)]))
         Delta = log_delta + np.log(self.total_edges + delta * self.num_possible_pairs)
         return PMILinearOperator(F, Delta, u)
-    # def get_attr_indices(self, attributed_nodes = None):
-    #     """Returns list of vocab indices that are not unknown, as well as the vocab items themselves. If attributed_nodes is not None, retains the unknown attributes corresponding to the given nodes that have attributes (in other attribute types)."""
-    #     attributed_node_set = set() if (attributed_nodes is None) else set(attributed_nodes)
-    #     attributed_node_vocab_set = set(('*???*_%d' % n) for n in attributed_node_set)
-    #     attr_indices, attr_vocab = [], []
-    #     for (i, v) in enumerate(pfa.vocab):
-    #         if ((v in attributed_node_vocab_set) or (not v.startswith('*???*'))):
-    #             attr_indices.append(i)
-    #             attr_vocab.append(v)
-    #     return (attr_indices, attr_vocab)
 
 
 class AttributeAnalyzer(object):
-    """Class for analyzing node attribute frequencies for various attribute types."""
+    """Class for analyzing node attribute frequencies for various text attributes."""
     def __init__(self, attr_filename, num_nodes, attr_types = None):
         """Creates an AttributeAnalyzer object from a csv file (;-separated) of node attributes. If attr_types is a specified list, only includes these attribute types."""
         self.num_nodes = num_nodes
@@ -224,7 +214,6 @@ class AttributeAnalyzer(object):
         self.num_attr_types = len(self.attr_types)
         self.attr_df = self.attr_df[np.vectorize(lambda t : t in set(self.attr_types))(self.attr_df['attributeType'])]
         self.attributed_nodes = sorted(list(set(self.attr_df['node'])))
-        #self.attributed_nodes_to_rows = dict((node, row) for (row, node) in enumerate(self.attributed_nodes))
         self.attr_freqs_by_type = dict((t, defaultdict(int)) for t in self.attr_types)
         for (t, val) in zip(self.attr_df['attributeType'], self.attr_df['attributeVal']):
             self.attr_freqs_by_type[t][val] += 1
@@ -333,54 +322,8 @@ class AttributeAnalyzer(object):
                 mapping.append({pfa.vocab_indices['*???*_%d' % i]})
         collapser = CollapseOperator(np.array(mapping), pfa.num_vocab)
         return SymmetricSparseLinearOperator(collapser.transpose() * (attr_block * collapser))
-    # def make_attr_embedding_matrix(self, attr_type, sim = 'NPMI1s', embedding = 'adj', delta = 0.0, k = 50, sphere = True, load = True, save = False):
-    #     """Makes matrix of feature embeddings for a given attribute type based on PMI similarities (saved off as matrix files). Rows are nodes, columns are features. Rows correspond to only the nodes that have at least one attribute."""
-    #     obj_name = '%s_%s_%s_delta%s_k%d%s_complete_embedding_matrix' % (attr_type, sim, embedding, str(delta), k, '_normalized' if sphere else '')
-    #     did_load = False
-    #     if load:
-    #         try:
-    #             if (not hasattr(self, 'attr_embedding_matrices')):
-    #                 self.attr_embedding_matrices = dict()
-    #             self.attr_embedding_matrices[attr_type] = load_object(self.folder, obj_name, 'pickle')
-    #             did_load = True
-    #         except:
-    #             print("\nCould not load %s from file." % obj_name)
-    #     if (not did_load):
-    #         feature_filename = self.folder + '/PMI/%s_%s_%s_delta%s_k%d_features.pickle' % (attr_type, sim, embedding, str(delta), k)
-    #         print("\nLoading features from %s..." % feature_filename)
-    #         feature_mat = pickle.load(open(feature_filename, 'rb'))
-    #         if sphere:
-    #             print("\nNormalizing feature vectors...")
-    #             normalize_mat_rows(feature_mat)
-    #         self.load_pairwise_freq_analyzer(attr_type)
-    #         pfa = self.pairwise_freq_analyzers[attr_type]
-    #         (attr_indices, attr_vocab) = get_attr_indices(pfa, self.attributed_nodes)
-    #         assert (len(attr_indices) == feature_mat.shape[0])  # confirm the features match
-    #         index_by_vocab = dict((v, i) for (i, v) in enumerate(attr_vocab))  # matrix indices for each attribute
-    #         mat = np.zeros((len(self.attributed_nodes), k), dtype = float)
-    #         attrs_by_node = self.attrs_by_node_by_type[attr_type]
-    #         ctr = 0
-    #         for i in range(self.num_nodes):
-    #             attrs = attrs_by_node[i]
-    #             if (len(attrs) > 0):
-    #                 row = np.zeros(k, dtype = float)  # compute average feature vector
-    #                 for attr in attrs:
-    #                     row += feature_mat[index_by_vocab[attr]]
-    #                 row /= len(attrs)
-    #             else:
-    #                 try:
-    #                     row = feature_mat[index_by_vocab['*???*_%d' % i]]
-    #                 except KeyError:
-    #                     continue
-    #             if sphere:
-    #                 row /= np.linalg.norm(row)  # normalize to sphere
-    #             mat[ctr] = row
-    #             ctr += 1
-    #         self.attr_embedding_matrices[attr_type] = mat
-    #     if (save and (not did_load)):
-    #         save_object(self.attr_embedding_matrices[attr_type], self.folder, obj_name, 'pickle')
     def get_attribute_indicator(self, attr, attr_type):
-        """Given an attribute and its type, returns a Series of indicators for the graph vertices. 0 indicates the presence of the attribute, 1 indicates the presence of other attributes but not the given attribute, and nan indicates the lack of any attributes in that type."""
+        """Given an attribute and its type, returns a Series of indicators for the graph vertices. 1 indicates the presence of the attribute, 0 indicates the presence of other attributes but not the given attribute, and nan indicates the lack of any attributes in that type."""
         attrs_by_node = self.attrs_by_node_by_type[attr_type]
         ind = np.zeros(self.num_nodes, dtype = float)
         for i in range(self.num_nodes):
@@ -393,31 +336,4 @@ class AttributeAnalyzer(object):
             else:
                 ind[i] = np.nan
         return pd.Series(ind)
-    def get_attribute_sample(self, attr, attr_type, n):
-        """Selects a random n nodes with the given attribute, and a random n nodes without it. Returns a triple of index lists: first the n with the attribute, then the n without it, then the remaining unselected nodes whose attribute status is known."""
-        ind = self.get_attribute_indicator(attr, attr_type)
-        known_true = list(ind[ind==1].index)
-        known_false = list(ind[ind==0].index)
-        if (n > min(len(known_true), len(known_false))):
-            raise ValueError("Sample size is too large.")
-        training_true = sorted(list(np.random.permutation(known_true)[:n]))
-        training_false = sorted(list(np.random.permutation(known_false)[:n]))
-        test = sorted(list(set(known_true + known_false).difference(training_true).difference(training_false)))
-        return (training_true, training_false, test)
-    # def get_PMI_training_and_test(self, attr, attr_type, n):
-    #     """Selects an (n, n) training sample of nodes with/without the attribute, and a test set of the remainder. Returns a pair (features, outputs) for the both the training and test sets. Here features are derived from the embedding of PMI matrices for each attribute type."""
-    #     assert (hasattr(self, 'attr_embedding_matrices') and all([attr_type in self.attr_embedding_matrices.keys() for attr_type in self.attr_types]))
-    #     (training_true, training_false, test) = self.get_attribute_sample(attr, attr_type, n)
-    #     training = sorted(training_true + training_false)
-    #     training_rows = [self.attributed_nodes_to_rows[node] for node in training]
-    #     test_rows = [self.attributed_nodes_to_rows[node] for node in test]
-    #     attr_indicator = self.get_attribute_indicator(attr, attr_type)
-    #     training_blocks, test_blocks = [], []
-    #     for at in self.attr_types:
-    #         if (at != attr_type):  # exclude the attribute type of interest
-    #             training_blocks.append(self.attr_embedding_matrices[at][training_rows, :])
-    #             test_blocks.append(self.attr_embedding_matrices[at][test_rows, :])
-    #     return ((np.hstack(training_blocks), attr_indicator[training]), (np.hstack(test_blocks), attr_indicator[test]))
-
-
 

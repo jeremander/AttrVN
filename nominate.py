@@ -4,14 +4,16 @@
 
     The directory [path] must include a file params.py containing all necessary parameters."""
 
-import os
 import sys
 import embed
 import imp
 import itertools
+from sklearn.preprocessing import Imputer, StandardScaler
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.decomposition import PCA
+from kde import TwoClassKDE
 from attr_vn import *
 
 def main():
@@ -23,28 +25,76 @@ def main():
     if (pm.rng_seed is not None):
         np.random.seed(pm.rng_seed)
 
-    # stack feature vectors, projecting to sphere if desired
+    # partition attribute types into text/discrete (str dtype) or numeric
+    text_attr_types, num_attr_types = [], []
+    for (attr_type, dtype) in pm.predictor_attr_types.items():
+        if (attr_type != pm.nomination_attr_type):
+            if (dtype is str):
+                text_attr_types.append(attr_type)
+            else:
+                num_attr_types.append(attr_type)
+    attr_types = text_attr_types + num_attr_types  # all predictor attribute types
+
+    # get data frame of numeric features
+    if pm.verbose:
+        print("Gathering numeric features...")
     start_time = time.time()
-    (context_features, attr_features_by_type) = embed.main()
-    attr_types = list(attr_features_by_type.keys())
-    embedding_mats = []
-    if pm.use_context:
-        if pm.sphere:
-            normalize_mat_rows(context_features)
-        embedding_mats.append(context_features)
-    for attr_type in attr_types:
-        if pm.sphere:
-            normalize_mat_rows(attr_features_by_type[attr_type])
-        embedding_mats.append(attr_features_by_type[attr_type])
-    mat = np.hstack(embedding_mats)
+    num_df = pd.read_csv(attr_filename, sep = ';')
+    num_df = num_df[np.vectorize(lambda t : t in set(num_attr_types))(num_df['attributeType'])]
+    num_df = num_df.pivot(index = 'node', columns = 'attributeType', values = 'attributeVal')
+    num_df = num_df.convert_objects(convert_numeric = True)
     if pm.verbose:
         print(time_format(time.time() - start_time))
+
+    # stack feature vectors, projecting to sphere if desired
+    if pm.verbose:
+        print("\nStacking feature vectors...")
+    start_time = time.time()
+    mats = []
+    # get embedding features
+    (context_features, text_attr_features_by_type) = embed.main()
+    embedding_mats = []
+    if pm.use_context:
+        if pm.sphere_context:
+            normalize_mat_rows(context_features)
+        embedding_mats.append(context_features)
+    for attr_type in text_attr_types:
+        if pm.sphere_content:
+            normalize_mat_rows(text_attr_features_by_type[attr_type])
+        embedding_mats.append(text_attr_features_by_type[attr_type])
+    if (len(text_attr_types) > 0):
+        mats += embedding_mats
+    if (len(num_attr_types) > 0):
+        # impute missing numeric data (using naive mean or median of the known values)
+        imputer = Imputer(strategy = pm.imputation)
+        mats.append(imputer.fit_transform(num_df))
+    mat = np.hstack(mats)
+    if pm.verbose:
+        print(time_format(time.time() - start_time))
+
+    # standard-scale the columns
+    mat = StandardScaler().fit_transform(mat)
+
+    # perform PCA on features, if desired
+    if pm.use_pca:
+        ncomps = mat.shape[1] if (pm.max_eig_pca is None) else min(pm.max_eig_pca, mat.shape[1])
+        pca = PCA(n_components = ncomps, whiten = pm.whiten)
+        if pm.verbose:
+            print("\nPerforming PCA on feature matrix...")
+        mat = timeit(pca.fit_transform)(mat)
+        sq_sing_vals = pca.explained_variance_
+        if (pm.which_elbow > 0):
+            elbows = get_elbows(sq_sing_vals, n = pm.which_elbow, thresh = 0.0)
+            k = elbows[min(len(elbows), pm.which_elbow) - 1]
+        else:
+            k = len(sq_sing_vals)
+        mat = mat[:, :k]
 
     # identify seeds
     n = mat.shape[0]
     if pm.verbose:
         print("\nCreating AttributeAnalyzer...")
-    a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, n, attr_types + [pm.nomination_attr_type])
+    a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, n, text_attr_types + [pm.nomination_attr_type])
     ind = a.get_attribute_indicator(pm.nomination_attr_val, pm.nomination_attr_type)
     true_seeds, false_seeds = ind[ind == 1].index, ind[ind == 0].index
     num_true_seeds, num_false_seeds = len(true_seeds), len(false_seeds)
@@ -53,14 +103,22 @@ def main():
     if pm.verbose:
         print("\n%d total seeds (%d positive, %d negative)" % (num_true_seeds + num_false_seeds, num_true_seeds, num_false_seeds))
 
+    # construct classifier
     if (pm.classifier == 'logreg'):
         clf = LogisticRegression()
     elif (pm.classifier == 'naive_bayes'):
         clf = GaussianNB()
     elif (pm.classifier == 'randfor'):
-        clf = RandomForestClassifier(n_estimators = pm.num_trees)
+        clf = RandomForestClassifier(n_estimators = pm.num_trees, n_jobs = pm.n_jobs)
     elif (pm.classifier == 'boost'):
         clf = AdaBoostClassifier(n_estimators = pm.num_trees)
+    elif (pm.classifier == 'kde'):
+        clf = TwoClassKDE()
+        train_in = mat[training]
+        train_out = ind[training]
+        if pm.verbose:
+            print("\nCross-validating to optimize KDE bandwidth...")
+        timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
     else:
         raise ValueError("Invalid classifier '%s'." % pm.classifier)
 
@@ -90,9 +148,12 @@ def main():
         cv_df = pd.DataFrame(columns = ['node', 'prob'] + [pm.nomination_attr_type] + attr_types)
         cv_df['node'] = cv_seeds
         cv_df['prob'] = cv_probs
-        for attr_type in [pm.nomination_attr_type] + attr_types:
+        for attr_type in [pm.nomination_attr_type] + text_attr_types:
             attrs_by_node = a.attrs_by_node_by_type[attr_type]
             cv_df[attr_type] = [str(attrs_by_node[node]) if (len(attrs_by_node[node]) > 0) else '{}' for node in cv_seeds]
+        for attr_type in num_attr_types:
+            vals = num_df[attr_type]
+            cv_df[attr_type] = ['' if np.isnan(vals[node]) else str(vals[node]) for node in cv_seeds]
         cv_df = cv_df.sort_values(by = 'prob', ascending = False)
         cumulative_prec = np.cumsum(np.asarray(ind[cv_df['node']])) / np.arange(1.0, num_cv_seeds + 1.0)
         MAP = np.mean(cumulative_prec)  # mean average precision
@@ -129,9 +190,12 @@ def main():
     nom_df = pd.DataFrame(columns = ['node', 'prob'] + attr_types)
     nom_df['node'] = test
     nom_df['prob'] = test_probs
-    for attr_type in attr_types:
+    for attr_type in text_attr_types:
         attrs_by_node = a.attrs_by_node_by_type[attr_type]
         nom_df[attr_type] = [str(attrs_by_node[node]) if (len(attrs_by_node[node]) > 0) else '{}' for node in test]
+    for attr_type in num_attr_types:
+        vals = num_df[attr_type]
+        nom_df[attr_type] = ['' if np.isnan(vals[node]) else str(vals[node]) for node in test]
     nom_df = nom_df.sort_values(by = 'prob', ascending = False)
     nom_df[:pm.nominate_max].to_csv(path + '/%s_%s_nomination.out' % (pm.nomination_attr_type, pm.nomination_attr_val), index = False, sep = '\t')
     if pm.verbose:
