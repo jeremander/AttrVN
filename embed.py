@@ -59,8 +59,8 @@ def main():
         a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, context_features.shape[0], text_attr_types)
         if pm.save_info:
             a.rank_plot(rank_thresh = pm.rank_thresh, show = False, filename = path + '/' + 'attr_rank_plot.png')
-            with open(path + '/attr_report.txt', 'w') as f:
-                f.write(a.attr_report(rank_thresh = pm.rank_thresh))
+        with open(path + '/attr_report.txt', 'w') as f:
+            f.write(a.attr_report(rank_thresh = pm.rank_thresh))
     attr_types_to_embed = [attr_type for attr_type in text_attr_types if (attr_type not in text_attr_features_by_type)]
     for attr_type in attr_types_to_embed:  # make attribute embedding for each text attribute type
         pfa = timeit(a.make_pairwise_freq_analyzer, pm.verbose)(attr_type, edges_filename, verbose = pm.verbose)

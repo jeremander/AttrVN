@@ -52,7 +52,7 @@ def main():
     attr, attr_type, pos_seeds, neg_seeds, num_samples, save_plot = opts.attr, opts.attr_type, opts.pos_seeds, opts.neg_seeds, opts.num_samples, opts.save_plot
     sqrt_samples = np.sqrt(num_samples)
 
-    path = 'gplus0_sub'
+    path = 'gplus0_lcc'
     pm = imp.load_source('params', path + '/params.py')
     attr_filename = path + '/' + pm.attr_filename
 
