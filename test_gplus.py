@@ -1,20 +1,25 @@
-import sys
-import embed
-import imp
-import itertools
-import optparse
-from copy import deepcopy
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
-from sklearn.linear_model import LogisticRegression
-from kde import TwoClassKDE
-from attr_vn import *
-from rstyle import *
+done_import = False
+while (not done_import):
+    try:
+        import sys
+        import embed
+        import imp
+        import itertools
+        import optparse
+        from copy import deepcopy
+        from sklearn.decomposition import PCA
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+        from sklearn.linear_model import LogisticRegression
+        from kde import TwoClassKDE
+        from attr_vn import *
+        from rstyle import *
 
-import matplotlib
-matplotlib.use('Agg')
+        import matplotlib
+        matplotlib.use('Agg')
+    except:
+        pass
 
 def legend_str(var, param, suppress_var):
     return str(param) if suppress_var else ('%s=%s' % (var, param))
@@ -23,7 +28,8 @@ def main():
 
     classifier_vals = ['logreg', 'randfor', 'boost', 'kde']
     embedding_info_vals = ['context', 'content', 'both']
-    sphere_content_vals = [True, False]
+    #sphere_content_vals = [True, False]
+    sphere_content_vals = [True]
     params = {'classifier' : classifier_vals, 'embedding_info' : embedding_info_vals, 'sphere_content' : sphere_content_vals}
 
     # free to permute these (but not remove them)
