@@ -25,7 +25,7 @@ max_eig = 200           # maximum number of eigenvectors to compute
 which_elbow = 2         # which elbow of the scree plot to set threshold (if 0, keeps all eigenvectors)
 
 # PCA
-use_pca = False          # use PCA after stacking features
+use_pca = False         # use PCA after stacking features
 max_eig_pca = None      # maximum number of eigenvectors to compute in PCA (if None, compute all)
 whiten = True           # whiten the PCA (ensure uncorrelated outputs with unit component-wise variances)
 
@@ -40,6 +40,6 @@ num_trees = 100         # number of decision trees to use if classifier is randf
 cv_max = 100            # max number of seeds to sample for cross-validation (if 0, no cross-validation)
 
 # KDE bandwidth selection
-kde_cv_gridsize = 9 #101       # number of bandwidth values (centered around Silverman's approximation) to try for gridsearch
-kde_cv_dynamic_range = 10#100  # max bandwidth / min bandwidth to try
+kde_cv_gridsize = 31 #101       # number of bandwidth values (centered around Silverman's approximation) to try for gridsearch
+kde_cv_dynamic_range = 100#100  # max bandwidth / min bandwidth to try
 kde_cv_folds = 10           # number of folds to use in bandwidth cross-validation

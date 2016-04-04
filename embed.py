@@ -27,7 +27,8 @@ def main():
         else:
             A = edgelist_to_sparse_adjacency_operator(edges_filename, verbose = pm.verbose)
             (eigvals, context_features) = timeit(embed_symmetric_operator, pm.verbose)(A, embedding = pm.embedding, k = pm.max_eig, tol = None, verbose = pm.verbose)
-            abs_eigvals = np.array(sorted(np.abs(eigvals), reverse = True))
+            pairs = sorted(enumerate(np.abs(eigvals)), key = lambda pair : pair[1], reverse = True)
+            indices, abs_eigvals = map(np.array, zip(*pairs))
             if (pm.which_elbow > 0):
                 elbows = get_elbows(abs_eigvals, n = pm.which_elbow, thresh = 0.0)
                 k = elbows[min(len(elbows), pm.which_elbow) - 1]
@@ -35,7 +36,7 @@ def main():
                 k = len(eigvals)
             if pm.verbose:
                 print("\nKeeping first k = %d eigenvectors..." % k)
-            context_features = context_features[:, :k] 
+            context_features = context_features[:, indices[:k]] 
             obj_name = '*context*_embedding_%s_k=%d' % (pm.embedding, k)
             timeit(save_object, pm.verbose)(context_features, path, obj_name, 'pickle', verbose = pm.verbose)
             if pm.save_info:
@@ -66,7 +67,8 @@ def main():
         pfa = timeit(a.make_pairwise_freq_analyzer, pm.verbose)(attr_type, edges_filename, verbose = pm.verbose)
         sim_op = timeit(a.make_uncollapsed_operator, pm.verbose)(pfa, attr_type, sim = pm.sim, delta = pm.delta, verbose = pm.verbose)
         (eigvals, attr_features) = timeit(embed_symmetric_operator, pm.verbose)(sim_op, embedding = pm.embedding, k = pm.max_eig, tol = None, verbose = pm.verbose)
-        abs_eigvals = np.array(sorted(np.abs(eigvals), reverse = True))
+        pairs = sorted(enumerate(np.abs(eigvals)), key = lambda pair : pair[1], reverse = True)
+        indices, abs_eigvals = map(np.array, zip(*pairs))
         if (pm.which_elbow > 0):
             elbows = get_elbows(abs_eigvals, n = pm.which_elbow, thresh = 0.0)
             k = elbows[min(len(elbows), pm.which_elbow) - 1]
@@ -74,7 +76,7 @@ def main():
             k = len(eigvals)
         if pm.verbose:
             print("\nKeeping first k = %d eigenvectors..." % k)
-        attr_features = attr_features[:, :k] 
+        attr_features = attr_features[:, indices[:k]] 
         text_attr_features_by_type[attr_type] = attr_features
         obj_name = '%s_embedding_sim=%s_delta=%s_%s_k=%d' % (attr_type, pm.sim, str(pm.delta), pm.embedding, k)
         timeit(save_object, pm.verbose)(attr_features, path, obj_name, 'pickle', verbose = pm.verbose)

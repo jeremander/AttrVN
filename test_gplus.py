@@ -15,21 +15,22 @@ while (not done_import):
         from kde import TwoClassKDE
         from attr_vn import *
         from rstyle import *
-
         import matplotlib
         matplotlib.use('Agg')
+        done_import = True
     except:
         pass
+        
 
 def legend_str(var, param, suppress_var):
     return str(param) if suppress_var else ('%s=%s' % (var, param))
 
 def main():
-
-    classifier_vals = ['logreg', 'randfor', 'boost', 'kde']
+    #classifier_vals = ['logreg', 'randfor', 'boost', 'kde']
+    classifier_vals = ['kde']
     embedding_info_vals = ['context', 'content', 'both']
-    #sphere_content_vals = [True, False]
-    sphere_content_vals = [True]
+    sphere_content_vals = [True, False]
+    #sphere_content_vals = [True]
     params = {'classifier' : classifier_vals, 'embedding_info' : embedding_info_vals, 'sphere_content' : sphere_content_vals}
 
     # free to permute these (but not remove them)
@@ -61,7 +62,7 @@ def main():
     attr, attr_type, pos_seeds, neg_seeds, num_samples, save_plot = opts.attr, opts.attr_type, opts.pos_seeds, opts.neg_seeds, opts.num_samples, opts.save_plot
     sqrt_samples = np.sqrt(num_samples)
 
-    path = 'gplus0_lcc'
+    path = 'gplus0_sub'
     pm = imp.load_source('params', path + '/params.py')
     attr_filename = path + '/' + pm.attr_filename
 
