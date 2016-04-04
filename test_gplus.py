@@ -13,6 +13,9 @@ from kde import TwoClassKDE
 from attr_vn import *
 from rstyle import *
 
+import matplotlib
+matplotlib.use('Agg')
+
 def legend_str(var, param, suppress_var):
     return str(param) if suppress_var else ('%s=%s' % (var, param))
 
