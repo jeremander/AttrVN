@@ -235,7 +235,8 @@ class AttributeAnalyzer(object):
             df['type'] = t
             afdf = afdf.append(df)
         return afdf
-    # def rank_plot(self, rank_thresh = 100, show = True, filename = None):
+    def rank_plot(self, rank_thresh = 100, show = True, filename = None):
+        pass
     #     """Returns plot of the frequencies of the attributes, sorted by rank."""
     #     plt.figure()
     #     afdf = self.attr_freq_df(rank_thresh)
