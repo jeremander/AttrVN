@@ -14,7 +14,7 @@ while (not done_import):
         from sklearn.linear_model import LogisticRegression
         from kde import TwoClassKDE
         from attr_vn import *
-        from rstyle import *
+        #from rstyle import *
         #import matplotlib
         #matplotlib.use('Agg')
         done_import = True
@@ -38,8 +38,8 @@ def main():
     #vars_by_distinguisher = {'color' : 'embedding_info', 'xfacet' : 'classifier', 'yfacet' : 'sphere_content'}
 
     numvals_by_distinguisher = {dist : len(params[var]) for (dist, var) in vars_by_distinguisher.items()} 
-    cmap = plt.cm.gist_ncar
-    colors = {j : cmap(int((j + 1) * cmap.N / (numvals_by_distinguisher['color'] + 1.0))) for j in range(numvals_by_distinguisher['color'])} if ('color' in vars_by_distinguisher) else {0 : 'blue'}
+    #cmap = plt.cm.gist_ncar
+    #colors = {j : cmap(int((j + 1) * cmap.N / (numvals_by_distinguisher['color'] + 1.0))) for j in range(numvals_by_distinguisher['color'])} if ('color' in vars_by_distinguisher) else {0 : 'blue'}
     vars_to_suppress_in_legend = ['embedding_info', 'classifier']  # show values but not variable names
 
     gplus_attr_types = ['employer', 'major', 'places_lived', 'school']
@@ -69,7 +69,7 @@ def main():
     csv_path = 'test_gplus/%s_%s_+%d_-%d.csv' % (attr_type, attr, pos_seeds, neg_seeds)
 
     try:
-        prec_df = pd.read_csv(csv_path, index = False)
+        prec_df = pd.read_csv(csv_path)
     except:
         # load all feature matrices, AttributeAnalyzer, identify seeds
         sys.argv = ['embed', path]
