@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from importlib import reload
 from collections import defaultdict
 from scipy.sparse.linalg import eigsh
@@ -80,22 +80,22 @@ def get_elbows(x, n = 1, thresh = 0.0):
         elbows += list(other_elbows)
     return elbows
 
-def scree_plot(eigvals, elbow = None, show = True, filename = None):
-    """Makes a scree plot of the absolute value of a series of eigenvalues using matplotlib. If elbow is not None, draws a vertical line at this index. If show = True, displays the plot. If filename is not None, saves the plot to this filename."""
-    plt.figure()
-    abs_eigvals = np.abs(eigvals)
-    ranked_abs_eigvals = np.array(sorted(abs_eigvals, reverse = True))
-    plt.plot(ranked_abs_eigvals, linewidth = 3)
-    if (elbow is not None):
-        plt.axvline(x = elbow, linewidth = 2, color = 'red', linestyle = 'dashed')
-    plt.title('Scree plot of eigenvalues')
-    plt.xlabel('rank', labelpad = 10)
-    plt.ylabel('abs(eigenvalue)', labelpad = 15)
-    plt.ylim(ymin = 0)
-    if filename:
-        plt.savefig(filename)
-    if show:
-        plt.show(block = False)
+# def scree_plot(eigvals, elbow = None, show = True, filename = None):
+#     """Makes a scree plot of the absolute value of a series of eigenvalues using matplotlib. If elbow is not None, draws a vertical line at this index. If show = True, displays the plot. If filename is not None, saves the plot to this filename."""
+#     plt.figure()
+#     abs_eigvals = np.abs(eigvals)
+#     ranked_abs_eigvals = np.array(sorted(abs_eigvals, reverse = True))
+#     plt.plot(ranked_abs_eigvals, linewidth = 3)
+#     if (elbow is not None):
+#         plt.axvline(x = elbow, linewidth = 2, color = 'red', linestyle = 'dashed')
+#     plt.title('Scree plot of eigenvalues')
+#     plt.xlabel('rank', labelpad = 10)
+#     plt.ylabel('abs(eigenvalue)', labelpad = 15)
+#     plt.ylim(ymin = 0)
+#     if filename:
+#         plt.savefig(filename)
+#     if show:
+#         plt.show(block = False)
 
 
 class PairwiseFreqAnalyzer(object):
@@ -235,56 +235,56 @@ class AttributeAnalyzer(object):
             df['type'] = t
             afdf = afdf.append(df)
         return afdf
-    def rank_plot(self, rank_thresh = 100, show = True, filename = None):
-        """Returns plot of the frequencies of the attributes, sorted by rank."""
-        plt.figure()
-        afdf = self.attr_freq_df(rank_thresh)
-        cmap = plt.cm.gist_ncar
-        colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex = False, sharey = False, facecolor = 'white')
-        plots_for_legend = []
-        for (i, t) in enumerate(self.attr_types):
-            afdf_for_type = afdf[afdf['type'] == t]
-            plots_for_legend.append(ax1.plot(afdf_for_type['rank'], np.log10(afdf_for_type['freq']), color = colors[i], linewidth = 2)[0])
-            ax2.plot(afdf_for_type['rank'], afdf_for_type['cumulative %'], color = colors[i], linewidth = 2)
-        ax1.set_title('Attribute frequencies by type', fontweight = 'bold')
-        ax2.set_xlabel('rank')
-        ax1.set_ylabel('log10(freq)')
-        ax2.set_ylabel('cumulative %')
-        ax2.set_ylim((0, 100))
-        ax1.grid(True, 'major', color = 'w', linestyle = '-')
-        ax2.grid(True, 'major', color = 'w', linestyle = '-')
-        ax1.set_axisbelow(True)
-        ax2.set_axisbelow(True)
-        ax1.patch.set_facecolor('0.89')
-        ax2.patch.set_facecolor('0.89')
-        plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
-        if filename:
-            plt.savefig(filename)
-        if show:
-            plt.show(block = False)
-    def loglog_rank_plot(self, show = True, filename = None):
-        """Returns log-log plot of the frequencies of the attributes, sorted by rank."""
-        plt.figure()
-        cmap = plt.cm.gist_ncar
-        colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
-        fig, ax = plt.subplots(1, 1, facecolor = 'white')
-        plots_for_legend = []
-        for (i, t) in enumerate(self.attr_types):
-            log10_freqs = np.log10(np.array([pair[1] for pair in self.sorted_attr_freqs_by_type[t]]))
-            log10_ranks = np.log10(np.arange(1, len(log10_freqs) + 1))  # use 1-up rank indexing, since it doesn't matter
-            plots_for_legend.append(ax.plot(log10_ranks, log10_freqs, color = colors[i], linewidth = 2)[0])
-        ax.set_title('Attribute frequencies by type', fontweight = 'bold')
-        ax.set_xlabel('log10(rank)')
-        ax.set_ylabel('log10(freq)')
-        ax.grid(True, 'major', color = 'w', linestyle = '-')
-        ax.patch.set_facecolor('0.89')
-        ax.set_axisbelow(True)
-        plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
-        if filename:
-            plt.savefig(filename)
-        if show:
-            plt.show(block = False)
+    # def rank_plot(self, rank_thresh = 100, show = True, filename = None):
+    #     """Returns plot of the frequencies of the attributes, sorted by rank."""
+    #     plt.figure()
+    #     afdf = self.attr_freq_df(rank_thresh)
+    #     cmap = plt.cm.gist_ncar
+    #     colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
+    #     fig, (ax1, ax2) = plt.subplots(2, 1, sharex = False, sharey = False, facecolor = 'white')
+    #     plots_for_legend = []
+    #     for (i, t) in enumerate(self.attr_types):
+    #         afdf_for_type = afdf[afdf['type'] == t]
+    #         plots_for_legend.append(ax1.plot(afdf_for_type['rank'], np.log10(afdf_for_type['freq']), color = colors[i], linewidth = 2)[0])
+    #         ax2.plot(afdf_for_type['rank'], afdf_for_type['cumulative %'], color = colors[i], linewidth = 2)
+    #     ax1.set_title('Attribute frequencies by type', fontweight = 'bold')
+    #     ax2.set_xlabel('rank')
+    #     ax1.set_ylabel('log10(freq)')
+    #     ax2.set_ylabel('cumulative %')
+    #     ax2.set_ylim((0, 100))
+    #     ax1.grid(True, 'major', color = 'w', linestyle = '-')
+    #     ax2.grid(True, 'major', color = 'w', linestyle = '-')
+    #     ax1.set_axisbelow(True)
+    #     ax2.set_axisbelow(True)
+    #     ax1.patch.set_facecolor('0.89')
+    #     ax2.patch.set_facecolor('0.89')
+    #     plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
+    #     if filename:
+    #         plt.savefig(filename)
+    #     if show:
+    #         plt.show(block = False)
+    # def loglog_rank_plot(self, show = True, filename = None):
+    #     """Returns log-log plot of the frequencies of the attributes, sorted by rank."""
+    #     plt.figure()
+    #     cmap = plt.cm.gist_ncar
+    #     colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
+    #     fig, ax = plt.subplots(1, 1, facecolor = 'white')
+    #     plots_for_legend = []
+    #     for (i, t) in enumerate(self.attr_types):
+    #         log10_freqs = np.log10(np.array([pair[1] for pair in self.sorted_attr_freqs_by_type[t]]))
+    #         log10_ranks = np.log10(np.arange(1, len(log10_freqs) + 1))  # use 1-up rank indexing, since it doesn't matter
+    #         plots_for_legend.append(ax.plot(log10_ranks, log10_freqs, color = colors[i], linewidth = 2)[0])
+    #     ax.set_title('Attribute frequencies by type', fontweight = 'bold')
+    #     ax.set_xlabel('log10(rank)')
+    #     ax.set_ylabel('log10(freq)')
+    #     ax.grid(True, 'major', color = 'w', linestyle = '-')
+    #     ax.patch.set_facecolor('0.89')
+    #     ax.set_axisbelow(True)
+    #     plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
+    #     if filename:
+    #         plt.savefig(filename)
+    #     if show:
+    #         plt.show(block = False)
     def attr_report(self, rank_thresh = 100):
         """Text string containing frequency info of each attr_type, and the list of top-ranked attribute values with their frequencies."""
         pd.set_option('display.max_rows', rank_thresh)

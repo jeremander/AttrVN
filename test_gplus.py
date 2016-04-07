@@ -15,8 +15,8 @@ while (not done_import):
         from kde import TwoClassKDE
         from attr_vn import *
         from rstyle import *
-        import matplotlib
-        matplotlib.use('Agg')
+        #import matplotlib
+        #matplotlib.use('Agg')
         done_import = True
     except:
         pass
@@ -163,56 +163,56 @@ def main():
         prec_df.to_csv(csv_path, index = False)
 
 
-    mean_cols = [col for col in prec_df.columns if (col[-1] == 'mean_prec')]
-    y_max = min(1.0, 1.1 * prec_df[mean_cols].max().max())
+    # mean_cols = [col for col in prec_df.columns if (col[-1] == 'mean_prec')]
+    # y_max = min(1.0, 1.1 * prec_df[mean_cols].max().max())
 
-    fig, axis_grid = plt.subplots(numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet'], sharex = 'col', sharey = 'row', figsize = (12, 8), facecolor = 'white')
-    axis_grid = np.array(axis_grid).reshape((numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet']))
-    plots_for_legend = []
-    keys_for_legend = []
-    param_dict = dict()
-    for x in range(numvals_by_distinguisher['xfacet']):
-        param_dict[vars_by_distinguisher['xfacet']] = params[vars_by_distinguisher['xfacet']][x]
-        for y in range(numvals_by_distinguisher['yfacet']):
-            param_dict[vars_by_distinguisher['yfacet']] = params[vars_by_distinguisher['yfacet']][y]
-            ax = axis_grid[y, x]
-            for i in range(numvals_by_distinguisher['color']):
-                param_dict[vars_by_distinguisher['color']] = params[vars_by_distinguisher['color']][i]
-                mean_prec = prec_df[(param_dict['embedding_info'], param_dict['sphere_content'], param_dict['classifier'], 'mean_prec')][:topN_plot]
-                stderr_prec = prec_df[(param_dict['embedding_info'], param_dict['sphere_content'], param_dict['classifier'], 'stderr_prec')][:topN_plot]
-                plot, = ax.plot(np.arange(topN_plot), mean_prec, color = colors[i], linewidth = 2)
-                if ('color' in vars_by_distinguisher):
-                    if ((x == 0) and (y == 0)):
-                        plots_for_legend.append(plot)
-                        key = legend_str(vars_by_distinguisher['color'], params[vars_by_distinguisher['color']][i], vars_by_distinguisher['color'] in vars_to_suppress_in_legend)
-                        keys_for_legend.append(key)
-                ax.fill_between(np.arange(topN_plot), mean_prec - 2 * stderr_prec, mean_prec + 2 * stderr_prec, color = colors[i], alpha = 0.1)
-            plot, = ax.plot(np.arange(topN_plot), guess_rate * np.ones(topN_plot, dtype = float), color = 'black', linestyle = 'dashed', linewidth = 2)
-            plot.set_dash_capstyle('projecting')
-            if ((x == 0) and (y == 0)):
-                plots_for_legend.append(plot)
-                keys_for_legend.append('guess')
-            ax.axvline(x = num_pos_in_test, color = 'black', linestyle = 'dashed', linewidth = 2)
-            if ((numvals_by_distinguisher['yfacet'] > 1) and (x == 0)):
-                ax.annotate(legend_str(vars_by_distinguisher['yfacet'], str(params[vars_by_distinguisher['yfacet']][y]), vars_by_distinguisher['yfacet'] in vars_to_suppress_in_legend), xy = (0, 0.5), xytext = (-ax.yaxis.labelpad, 0), xycoords = ax.yaxis.label, textcoords = 'offset points', ha = 'right', va = 'center', rotation = 'vertical')
-            if ((numvals_by_distinguisher['xfacet'] > 1) and (y == 0)):
-                ax.annotate(legend_str(vars_by_distinguisher['xfacet'], str(params[vars_by_distinguisher['xfacet']][x]), vars_by_distinguisher['xfacet'] in vars_to_suppress_in_legend), xy = (0.5, 1.01), xytext = (0, 0), xycoords = 'axes fraction', textcoords = 'offset points', ha = 'center', va = 'baseline')
-            ax.set_xlim((0, topN_plot - 1))
-            ax.set_ylim((0.0, y_max))
-            rstyle(ax)
-            ax.patch.set_facecolor('0.89')
+    # fig, axis_grid = plt.subplots(numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet'], sharex = 'col', sharey = 'row', figsize = (12, 8), facecolor = 'white')
+    # axis_grid = np.array(axis_grid).reshape((numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet']))
+    # plots_for_legend = []
+    # keys_for_legend = []
+    # param_dict = dict()
+    # for x in range(numvals_by_distinguisher['xfacet']):
+    #     param_dict[vars_by_distinguisher['xfacet']] = params[vars_by_distinguisher['xfacet']][x]
+    #     for y in range(numvals_by_distinguisher['yfacet']):
+    #         param_dict[vars_by_distinguisher['yfacet']] = params[vars_by_distinguisher['yfacet']][y]
+    #         ax = axis_grid[y, x]
+    #         for i in range(numvals_by_distinguisher['color']):
+    #             param_dict[vars_by_distinguisher['color']] = params[vars_by_distinguisher['color']][i]
+    #             mean_prec = prec_df[(param_dict['embedding_info'], param_dict['sphere_content'], param_dict['classifier'], 'mean_prec')][:topN_plot]
+    #             stderr_prec = prec_df[(param_dict['embedding_info'], param_dict['sphere_content'], param_dict['classifier'], 'stderr_prec')][:topN_plot]
+    #             plot, = ax.plot(np.arange(topN_plot), mean_prec, color = colors[i], linewidth = 2)
+    #             if ('color' in vars_by_distinguisher):
+    #                 if ((x == 0) and (y == 0)):
+    #                     plots_for_legend.append(plot)
+    #                     key = legend_str(vars_by_distinguisher['color'], params[vars_by_distinguisher['color']][i], vars_by_distinguisher['color'] in vars_to_suppress_in_legend)
+    #                     keys_for_legend.append(key)
+    #             ax.fill_between(np.arange(topN_plot), mean_prec - 2 * stderr_prec, mean_prec + 2 * stderr_prec, color = colors[i], alpha = 0.1)
+    #         plot, = ax.plot(np.arange(topN_plot), guess_rate * np.ones(topN_plot, dtype = float), color = 'black', linestyle = 'dashed', linewidth = 2)
+    #         plot.set_dash_capstyle('projecting')
+    #         if ((x == 0) and (y == 0)):
+    #             plots_for_legend.append(plot)
+    #             keys_for_legend.append('guess')
+    #         ax.axvline(x = num_pos_in_test, color = 'black', linestyle = 'dashed', linewidth = 2)
+    #         if ((numvals_by_distinguisher['yfacet'] > 1) and (x == 0)):
+    #             ax.annotate(legend_str(vars_by_distinguisher['yfacet'], str(params[vars_by_distinguisher['yfacet']][y]), vars_by_distinguisher['yfacet'] in vars_to_suppress_in_legend), xy = (0, 0.5), xytext = (-ax.yaxis.labelpad, 0), xycoords = ax.yaxis.label, textcoords = 'offset points', ha = 'right', va = 'center', rotation = 'vertical')
+    #         if ((numvals_by_distinguisher['xfacet'] > 1) and (y == 0)):
+    #             ax.annotate(legend_str(vars_by_distinguisher['xfacet'], str(params[vars_by_distinguisher['xfacet']][x]), vars_by_distinguisher['xfacet'] in vars_to_suppress_in_legend), xy = (0.5, 1.01), xytext = (0, 0), xycoords = 'axes fraction', textcoords = 'offset points', ha = 'center', va = 'baseline')
+    #         ax.set_xlim((0, topN_plot - 1))
+    #         ax.set_ylim((0.0, y_max))
+    #         rstyle(ax)
+    #         ax.patch.set_facecolor('0.89')
 
-    this_plot_title = 'Cumulative precision plots\n%s = %s, %d +seeds, %d -seeds' % (attr_type, attr, pos_seeds, neg_seeds)
-    fig.text(0.5, 0.04, 'rank', ha = 'center', fontsize = 14)
-    fig.text(0.02, 0.5, 'precision', va = 'center', rotation = 'vertical', fontsize = 14)
-    plt.figlegend(plots_for_legend, keys_for_legend, 'right', fontsize = 10)
-    plt.suptitle(this_plot_title, fontsize = 16, fontweight = 'bold')
-    plt.subplots_adjust(left = 0.11, right = 0.9)
+    # this_plot_title = 'Cumulative precision plots\n%s = %s, %d +seeds, %d -seeds' % (attr_type, attr, pos_seeds, neg_seeds)
+    # fig.text(0.5, 0.04, 'rank', ha = 'center', fontsize = 14)
+    # fig.text(0.02, 0.5, 'precision', va = 'center', rotation = 'vertical', fontsize = 14)
+    # plt.figlegend(plots_for_legend, keys_for_legend, 'right', fontsize = 10)
+    # plt.suptitle(this_plot_title, fontsize = 16, fontweight = 'bold')
+    # plt.subplots_adjust(left = 0.11, right = 0.9)
 
-    if save_plot:
-        plot_path = 'test_gplus/%s_%s_+%d_-%d.png' % (attr_type, attr, pos_seeds, neg_seeds)
-        plt.savefig(plot_path)
-    plt.show()
+    # if save_plot:
+    #     plot_path = 'test_gplus/%s_%s_+%d_-%d.png' % (attr_type, attr, pos_seeds, neg_seeds)
+    #     plt.savefig(plot_path)
+    # plt.show()
 
 
 
