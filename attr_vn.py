@@ -263,6 +263,28 @@ class AttributeAnalyzer(object):
             plt.savefig(filename)
         if show:
             plt.show(block = False)
+    def loglog_rank_plot(self, show = True, filename = None):
+        """Returns log-log plot of the frequencies of the attributes, sorted by rank."""
+        plt.figure()
+        cmap = plt.cm.gist_ncar
+        colors = {i : cmap(int((i + 1) * cmap.N / (self.num_attr_types + 1.0))) for i in range(self.num_attr_types)}
+        fig, ax = plt.subplots(1, 1, facecolor = 'white')
+        plots_for_legend = []
+        for (i, t) in enumerate(self.attr_types):
+            log10_freqs = np.log10(np.array([pair[1] for pair in self.sorted_attr_freqs_by_type[t]]))
+            log10_ranks = np.log10(np.arange(1, len(log10_freqs) + 1))  # use 1-up rank indexing, since it doesn't matter
+            plots_for_legend.append(ax.plot(log10_ranks, log10_freqs, color = colors[i], linewidth = 2)[0])
+        ax.set_title('Attribute frequencies by type', fontweight = 'bold')
+        ax.set_xlabel('log10(rank)')
+        ax.set_ylabel('log10(freq)')
+        ax.grid(True, 'major', color = 'w', linestyle = '-')
+        ax.patch.set_facecolor('0.89')
+        ax.set_axisbelow(True)
+        plt.figlegend(plots_for_legend, self.attr_types, 'right', fontsize = 10)
+        if filename:
+            plt.savefig(filename)
+        if show:
+            plt.show(block = False)
     def attr_report(self, rank_thresh = 100):
         """Text string containing frequency info of each attr_type, and the list of top-ranked attribute values with their frequencies."""
         pd.set_option('display.max_rows', rank_thresh)

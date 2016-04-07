@@ -42,8 +42,11 @@ def main():
             if pm.save_info:
                 np.savetxt(path + '/*context*_eigvals.csv', eigvals, fmt = '%f')
                 scree_plot(eigvals, k, show = False, filename = path + '/' + '*context*_scree.png')
+        n = context_features.shape[0]
     else:
         context_features = None
+        A = edgelist_to_sparse_adjacency_operator(edges_filename, verbose = pm.verbose)
+        n = A.shape[0]
 
     # load/perform attribute embeddings
     text_attr_types = [attr_type for (attr_type, dtype) in pm.predictor_attr_types.items() if dtype is str]
@@ -57,7 +60,7 @@ def main():
     if (len(text_attr_features_by_type) < len(text_attr_types)):  # need to construct AttributeAnalyzer to get remaining attribute embeddings
         if pm.verbose:
             print("\nCreating AttributeAnalyzer...")
-        a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, context_features.shape[0], text_attr_types)
+        a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, n, text_attr_types)
         if pm.save_info:
             a.rank_plot(rank_thresh = pm.rank_thresh, show = False, filename = path + '/' + 'attr_rank_plot.png')
         with open(path + '/attr_report.txt', 'w') as f:

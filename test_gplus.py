@@ -28,9 +28,9 @@ def legend_str(var, param, suppress_var):
 def main():
     #classifier_vals = ['logreg', 'randfor', 'boost', 'kde']
     classifier_vals = ['kde']
-    embedding_info_vals = ['context', 'content', 'both']
-    sphere_content_vals = [True, False]
-    #sphere_content_vals = [True]
+    embedding_info_vals = ['context', 'NPMIs', 'both']
+    #sphere_content_vals = [True, False]
+    sphere_content_vals = [True]
     params = {'classifier' : classifier_vals, 'embedding_info' : embedding_info_vals, 'sphere_content' : sphere_content_vals}
 
     # free to permute these (but not remove them)
@@ -66,96 +66,103 @@ def main():
     pm = imp.load_source('params', path + '/params.py')
     attr_filename = path + '/' + pm.attr_filename
 
-    # load all feature matrices, AttributeAnalyzer, identify seeds
-    sys.argv = ['embed', path]
-    (context_features, attr_features_by_type) = embed.main()  # use sim, delta, embedding, etc. from params.py file
-    assert ((context_features is not None) and (len(attr_features_by_type) == 4))
-    other_attr_types = [at for at in gplus_attr_types if (at != attr_type)]
-    n = context_features.shape[0]
-    print("\nCreating AttributeAnalyzer...")
-    a = timeit(AttributeAnalyzer, True)(attr_filename, n, gplus_attr_types)
-    ind = a.get_attribute_indicator(attr, attr_type)
-    true_seeds, false_seeds = ind[ind == 1].index, ind[ind == 0].index
-    num_true_seeds, num_false_seeds = len(true_seeds), len(false_seeds)
-    all_seeds = set(true_seeds).union(set(false_seeds))
-    assert ((num_true_seeds > 1) and (num_false_seeds > 1))  # can't handle this otherwise, yet
-    print("\n%d known instances of %s (%d positive, %d negative)" % (num_true_seeds + num_false_seeds, attr_type, num_true_seeds, num_false_seeds))
-    if (pos_seeds >= num_true_seeds):
-        print("\tWarning: changing pos_seeds from %d to %d." % (pos_seeds, num_true_seeds - 1))
-        pos_seeds = num_true_seeds - 1
-    if (neg_seeds >= num_false_seeds):
-        print("\tWarning: changing neg_seeds from %d to %d." % (neg_seeds, num_false_seeds - 1))
-        neg_seeds = num_false_seeds - 1
-    print("Sampling %d positive seeds, %d negative seeds" % (pos_seeds, neg_seeds))
-    num_pos_in_test = num_true_seeds - pos_seeds
-    num_test = num_true_seeds + num_false_seeds - pos_seeds - neg_seeds
-    guess_rate = num_pos_in_test / num_test
-    topN_save = min(topN_save, num_test)
-    topN_plot = min(topN_plot, topN_save)
+    csv_path = 'test_gplus/%s_%s_+%d_-%d.csv' % (attr_type, attr, pos_seeds, neg_seeds)
 
+    try:
+        prec_df = pd.read_csv(csv_path, index = False)
+    except:
+        # load all feature matrices, AttributeAnalyzer, identify seeds
+        sys.argv = ['embed', path]
+        (context_features, attr_features_by_type) = embed.main()  # use sim, delta, embedding, etc. from params.py file
+        assert ((context_features is not None) and (len(attr_features_by_type) == 4))
+        other_attr_types = [at for at in gplus_attr_types if (at != attr_type)]
+        n = context_features.shape[0]
+        print("\nCreating AttributeAnalyzer...")
+        a = timeit(AttributeAnalyzer, True)(attr_filename, n, gplus_attr_types)
+        ind = a.get_attribute_indicator(attr, attr_type)
+        true_seeds, false_seeds = ind[ind == 1].index, ind[ind == 0].index
+        num_true_seeds, num_false_seeds = len(true_seeds), len(false_seeds)
+        all_seeds = set(true_seeds).union(set(false_seeds))
+        assert ((num_true_seeds > 1) and (num_false_seeds > 1))  # can't handle this otherwise, yet
+        print("\n%d known instances of %s (%d positive, %d negative)" % (num_true_seeds + num_false_seeds, attr_type, num_true_seeds, num_false_seeds))
+        if (pos_seeds >= num_true_seeds):
+            print("\tWarning: changing pos_seeds from %d to %d." % (pos_seeds, num_true_seeds - 1))
+            pos_seeds = num_true_seeds - 1
+        if (neg_seeds >= num_false_seeds):
+            print("\tWarning: changing neg_seeds from %d to %d." % (neg_seeds, num_false_seeds - 1))
+            neg_seeds = num_false_seeds - 1
+        print("Sampling %d positive seeds, %d negative seeds" % (pos_seeds, neg_seeds))
+        num_pos_in_test = num_true_seeds - pos_seeds
+        num_test = num_true_seeds + num_false_seeds - pos_seeds - neg_seeds
+        guess_rate = num_pos_in_test / num_test
+        topN_save = min(topN_save, num_test)
+        topN_plot = min(topN_plot, topN_save)
 
-    # construct classifiers
-    clf_dict = {'logreg' : LogisticRegression(), 'naive_bayes' : GaussianNB(), 'randfor' : RandomForestClassifier(n_estimators = pm.num_trees), 'boost' : AdaBoostClassifier(n_estimators = pm.num_trees), 'kde' : TwoClassKDE()}
-    prec_df = pd.DataFrame()  # for storing mean & stdev topN_save precisions for each parameter combo
+        # construct classifiers
+        clf_dict = {'logreg' : LogisticRegression(), 'naive_bayes' : GaussianNB(), 'randfor' : RandomForestClassifier(n_estimators = pm.num_trees), 'boost' : AdaBoostClassifier(n_estimators = pm.num_trees), 'kde' : TwoClassKDE()}
+        prec_df = pd.DataFrame()  # for storing mean & stdev topN_save precisions for each parameter combo
 
-    # run nomination
-    for embedding_info in embedding_info_vals:
-        for sphere_content in sphere_content_vals:
-            print("\nembedding_info = %s, sphere_content = %s" % (embedding_info, str(sphere_content)))
-            # stack all desired feature matrices, with or without projecting to sphere
-            embedding_mats = []
-            if (embedding_info != 'content'):
-                context_mat = deepcopy(context_features)
-                if pm.sphere_context:
-                    normalize_mat_rows(context_mat)
-                embedding_mats.append(context_mat)
-            if (embedding_info != 'context'):
-                for at in other_attr_types:
-                    attr_mat = deepcopy(attr_features_by_type[at])
-                    if sphere_content:
-                        normalize_mat_rows(attr_mat)
-                    embedding_mats.append(attr_mat)
-            mat = np.hstack(embedding_mats)
-            mat = StandardScaler().fit_transform(mat)
-            if pm.use_pca:  # perform PCA on features, if desired
-                ncomps = mat.shape[1] if (pm.max_eig_pca is None) else min(pm.max_eig_pca, mat.shape[1])
-                pca = PCA(n_components = ncomps, whiten = pm.whiten)
-                if pm.verbose:
-                    print("\nPerforming PCA on feature matrix...")
-                mat = timeit(pca.fit_transform)(mat)
-                sq_sing_vals = pca.explained_variance_
-                if (pm.which_elbow > 0):
-                    elbows = get_elbows(sq_sing_vals, n = pm.which_elbow, thresh = 0.0)
-                    k = elbows[min(len(elbows), pm.which_elbow) - 1]
-                else:
-                    k = len(sq_sing_vals)
-                mat = mat[:, :k]
-            precs_by_classifier = {classifier : np.zeros((num_samples, topN_save)) for classifier in classifier_vals}  # top N cumulative precisions
-            for s in range(num_samples):
-                print("\nSEED = %d" % s)
-                np.random.seed(s)
-                ts = true_seeds[np.random.choice(range(num_true_seeds), pos_seeds, replace = False)]
-                fs = false_seeds[np.random.choice(range(num_false_seeds), neg_seeds, replace = False)]
-                training = list(ts) + list(fs)
-                test = list(all_seeds.difference(set(training)))
-                train_in, train_out = mat[training], ind[training]
-                test_in, test_out = mat[test], ind[test]
-                for classifier in classifier_vals:
-                    print("classifier = %s" % classifier)
-                    clf = clf_dict[classifier]
-                    if (clf == 'kde'):
-                        clf.fit_with_optimal_bandwidth(train_in, train_out, ridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds)
+        # run nomination
+        for embedding_info in embedding_info_vals:
+            for sphere_content in sphere_content_vals:
+                print("\nembedding_info = %s, sphere_content = %s" % (embedding_info, str(sphere_content)))
+                # stack all desired feature matrices, with or without projecting to sphere
+                embedding_mats = []
+                if (embedding_info != 'NPMIs'):
+                    context_mat = deepcopy(context_features)
+                    if pm.sphere_context:
+                        normalize_mat_rows(context_mat)
+                    embedding_mats.append(context_mat)
+                if (embedding_info != 'context'):
+                    for at in other_attr_types:
+                        attr_mat = deepcopy(attr_features_by_type[at])
+                        if sphere_content:
+                            normalize_mat_rows(attr_mat)
+                        embedding_mats.append(attr_mat)
+                mat = np.hstack(embedding_mats)
+                mat = StandardScaler().fit_transform(mat)
+                if pm.use_pca:  # perform PCA on features, if desired
+                    ncomps = mat.shape[1] if (pm.max_eig_pca is None) else min(pm.max_eig_pca, mat.shape[1])
+                    pca = PCA(n_components = ncomps, whiten = pm.whiten)
+                    if pm.verbose:
+                        print("\nPerforming PCA on feature matrix...")
+                    mat = timeit(pca.fit_transform)(mat)
+                    sq_sing_vals = pca.explained_variance_
+                    if (pm.which_elbow > 0):
+                        elbows = get_elbows(sq_sing_vals, n = pm.which_elbow, thresh = 0.0)
+                        k = elbows[min(len(elbows), pm.which_elbow) - 1]
                     else:
-                        clf.fit(train_in, train_out)
-                    df = pd.DataFrame(index = test)
-                    df['ind'] = test_out
-                    df['prob'] = clf.predict_proba(test_in)[:, 1]
-                    df = df.sort_values(by = 'prob', ascending = False)
-                    prec = np.cumsum(np.asarray(df['ind'])[:topN_save]) / np.arange(1.0, topN_save + 1.0)
-                    precs_by_classifier[classifier][s] = prec
-            for classifier in classifier_vals:
-                prec_df[(embedding_info, sphere_content, classifier, 'mean_prec')] = precs_by_classifier[classifier].mean(axis = 0)
-                prec_df[(embedding_info, sphere_content, classifier, 'stderr_prec')] = precs_by_classifier[classifier].std(axis = 0) / sqrt_samples
+                        k = len(sq_sing_vals)
+                    mat = mat[:, :k]
+                precs_by_classifier = {classifier : np.zeros((num_samples, topN_save)) for classifier in classifier_vals}  # top N cumulative precisions
+                for s in range(num_samples):
+                    print("\nSEED = %d" % s)
+                    np.random.seed(s)
+                    ts = true_seeds[np.random.choice(range(num_true_seeds), pos_seeds, replace = False)]
+                    fs = false_seeds[np.random.choice(range(num_false_seeds), neg_seeds, replace = False)]
+                    training = list(ts) + list(fs)
+                    test = list(all_seeds.difference(set(training)))
+                    train_in, train_out = mat[training], ind[training]
+                    test_in, test_out = mat[test], ind[test]
+                    for classifier in classifier_vals:
+                        print("classifier = %s" % classifier)
+                        clf = clf_dict[classifier]
+                        if (clf == 'kde'):
+                            clf.fit_with_optimal_bandwidth(train_in, train_out, ridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds)
+                        else:
+                            clf.fit(train_in, train_out)
+                        df = pd.DataFrame(index = test)
+                        df['ind'] = test_out
+                        df['prob'] = clf.predict_proba(test_in)[:, 1]
+                        df = df.sort_values(by = 'prob', ascending = False)
+                        prec = np.cumsum(np.asarray(df['ind'])[:topN_save]) / np.arange(1.0, topN_save + 1.0)
+                        precs_by_classifier[classifier][s] = prec
+                for classifier in classifier_vals:
+                    prec_df[(embedding_info, sphere_content, classifier, 'mean_prec')] = precs_by_classifier[classifier].mean(axis = 0)
+                    prec_df[(embedding_info, sphere_content, classifier, 'stderr_prec')] = precs_by_classifier[classifier].std(axis = 0) / sqrt_samples
+        prec_df.to_csv(csv_path, index = False)
+
+
     mean_cols = [col for col in prec_df.columns if (col[-1] == 'mean_prec')]
     y_max = min(1.0, 1.1 * prec_df[mean_cols].max().max())
 
