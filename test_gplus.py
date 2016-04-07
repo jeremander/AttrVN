@@ -57,12 +57,12 @@ def main():
     p.add_option('--neg_seeds', '-n', type = int, default = 50, help = 'number of negative seeds')
     p.add_option('--num_samples', '-S', type = int, default = 50, help = 'number of Monte Carlo samples')
     p.add_option('--save_plot', '-v', action = 'store_true', default = False, help = 'save plot')
+    p.add_option('--path', type = str, default = 'gplus0_sub', help = 'path to data')
     opts, args = p.parse_args()
 
-    attr, attr_type, pos_seeds, neg_seeds, num_samples, save_plot = opts.attr, opts.attr_type, opts.pos_seeds, opts.neg_seeds, opts.num_samples, opts.save_plot
+    attr, attr_type, pos_seeds, neg_seeds, num_samples, save_plot, path = opts.attr, opts.attr_type, opts.pos_seeds, opts.neg_seeds, opts.num_samples, opts.save_plot, opts.path
     sqrt_samples = np.sqrt(num_samples)
 
-    path = 'gplus0_sub'
     pm = imp.load_source('params', path + '/params.py')
     attr_filename = path + '/' + pm.attr_filename
 
