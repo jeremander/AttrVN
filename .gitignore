@@ -2,11 +2,14 @@ gplus0_lcc/
 gplus0_sub/results/
 gplus0_sub/test/
 yelp/
+test_gplus*
 *.txt
 *.png
 *.out
 *.pickle
 *eigvals.csv
+*2.py
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
