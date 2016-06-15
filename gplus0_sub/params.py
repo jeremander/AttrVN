@@ -37,7 +37,7 @@ imputation = 'mean'     # strategy for imputation of missing numeric data ('mean
 # classification
 classifier = 'logreg'  # supervised classifier ('logreg', 'naive_bayes', 'randfor', 'boost', 'kde')
 num_trees = 100         # number of decision trees to use if classifier is randfor or boost
-cv_max = 100            # max number of seeds to sample for cross-validation (if 0, no cross-validation)
+cv_max = 10            # max number of seeds to sample for cross-validation (if 0, no cross-validation)
 
 # KDE bandwidth selection
 kde_cv_gridsize = 31 #101       # number of bandwidth values (centered around Silverman's approximation) to try for gridsearch
