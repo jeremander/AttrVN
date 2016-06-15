@@ -28,15 +28,22 @@ Requirements:
 
 The top-level `AttrVN` directory contains all the libraries and scripts needed to run vertex nomination. To feed in the data and parameters, create a directory (in our included Google+ example, this is `gplus0_sub`), which should include three files:
 
-1. An edge file (pairs of integer indices on each line, separated by whitespace)
+1) An edge file (pairs of integer indices on each line, separated by whitespace)
 2) An attribute file (three-column semicolon-delimited table whose first line is `node;attributeType;attributeVal` and each subsequent line is of the form `index;type;value`.
 3) A file called `params.py` specifying all of the algorithm parameters. Crucially, this includes the data types for each attribute type, as well as the designation of one attribute type and attribute value to nominate. The VN "seeds" are considered to be all vertices in the graph for which this designated attribute type is specified.
 
 Once such a directory exists containing the data and parameters, the vertex nomination algorithm can be run in two stages using the following scripts:
 
-1) `embed.py`: Performs the embeddings on the graph and/or discrete attributes and saves off each feature matrix as a Python pickle file, along with other (optional) output.
+1) `embed.py`: Performs the embeddings on the graph and/or discrete attributes and saves off each feature matrix as a Python pickle file, along with other (optional) output. This procedure only needs to be done once.
 Usage: `python3 embed.py gplus0_sub`
 
 2) `nominate.py`: Stacks the feature matrices, performs any preprocessing, identifies the seed vertices and trains a binary classifier on these, performs cross-validation (optionally) to demonstrate performance of the classifier, and outputs a ranked nomination list.
 Usage: `python3 nominate.py gplus0_sub`
+
+
+## Example Dataset
+
+The original dataset comes from a public crawl of Google+ in its early history. It contained about 4.7 million vertices and about 33 million edges. Each vertex possessed up to four free-form attribute types: `employer`, `major`, `places_lived`, and `school`. A user could provide multiple values for each of these attributes, or no value. In fact, at the time of the crawl, only about 20% of users included any attributes in their profile. For each attribute type, there were over 100,000 unique text strings provided in the dataset, and their distributions tended to obey a power law.
+
+The graph embeddings each took several hours on a MacBook Pro (speed enabled by sparse treatment of the data); supervised training and nomination took minutes. To make this process even faster in an example setting, the `gplus0_sub` directory contains only a subgraph (50,000 vertices) of the original data set. This subgraph is fully connected, however.
 

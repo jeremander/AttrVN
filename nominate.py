@@ -156,11 +156,11 @@ def main():
             cv_df[attr_type] = ['' if np.isnan(vals[node]) else str(vals[node]) for node in cv_seeds]
         cv_df = cv_df.sort_values(by = 'prob', ascending = False)
         cumulative_prec = np.cumsum(np.asarray(ind[cv_df['node']])) / np.arange(1.0, num_cv_seeds + 1.0)
-        MAP = np.mean(cumulative_prec)  # mean average precision
+        AP = np.mean(cumulative_prec)  # average precision
         if pm.verbose:
             print(time_format(time.time() - start_time))
             print("\nguess rate = %5f" % guess_rate)
-            print("mean average precision = %5f" % MAP)
+            print("average precision = %5f" % AP)
             print("cumulative precisions:")
             print(cumulative_prec)
         if pm.save_info:
@@ -172,7 +172,7 @@ def main():
             plt.xlabel('rank')
             plt.ylabel('prec')
             plt.ylim((0, min(1.0, 1.1 * cumulative_prec.max())))
-            plt.title('Cumulative precision of cross-validated seeds\nMAP = %5f' % MAP, fontweight = 'bold')
+            plt.title('Cumulative precision of cross-validated seeds\nAP = %5f' % AP, fontweight = 'bold')
             plt.savefig(path + '/%s_%s_cv_prec.png' % (pm.nomination_attr_type, pm.nomination_attr_val))
 
     # nominate the unknown nodes

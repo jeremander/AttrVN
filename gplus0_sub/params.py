@@ -4,9 +4,9 @@ attr_filename = 'node_attributes.csv'
 
 # attributes
 use_context = True      # use the context embedding in addition to attribute features
-predictor_attr_types = {'employer' : str, 'major' : str, 'places_lived' : str, 'school' : str}
-nomination_attr_type = 'school'               
-nomination_attr_val = 'university of california, berkeley'  
+predictor_attr_types = {'employer' : str, 'major' : str, 'school' : str}
+nomination_attr_type = 'places_lived'               
+nomination_attr_val = 'new york' 
 
 # options
 load_embeddings = True  # load pickled embeddings if they exist; otherwise, create them anew & save them
@@ -37,7 +37,7 @@ imputation = 'mean'     # strategy for imputation of missing numeric data ('mean
 # classification
 classifier = 'logreg'  # supervised classifier ('logreg', 'naive_bayes', 'randfor', 'boost', 'kde')
 num_trees = 100         # number of decision trees to use if classifier is randfor or boost
-cv_max = 10            # max number of seeds to sample for cross-validation (if 0, no cross-validation)
+cv_max = 100            # max number of seeds to sample for cross-validation (if 0, no cross-validation)
 
 # KDE bandwidth selection
 kde_cv_gridsize = 31 #101       # number of bandwidth values (centered around Silverman's approximation) to try for gridsearch
