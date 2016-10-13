@@ -1,0 +1,17 @@
+attribute,attributeType,freq
+google,employer,282
+ibm,employer,77
+university of florida,employer,44
+freelance,employer,28
+computer science,major,732
+mba,major,179
+psychology,major,87
+chemistry,major,35
+bangalore,places_lived,265
+london,places_lived,187
+new york,places_lived,123
+tehran,places_lived,63
+"university of california, berkeley",school,125
+university of michigan,school,73
+university of texas at austin,school,51
+brown university,school,32

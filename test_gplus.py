@@ -156,7 +156,7 @@ def main():
                         print("classifier = %s" % classifier)
                         clf = clf_dict[classifier]
                         if (clf == 'kde'):
-                            clf.fit_with_optimal_bandwidth(train_in, train_out, ridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds)
+                            clf.fit_with_optimal_bandwidth(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds)
                         else:
                             clf.fit(train_in, train_out)
                         df = pd.DataFrame(index = test)
