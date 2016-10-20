@@ -9,11 +9,8 @@ import sys
 import imp
 from attr_vn import *
 
-
-def main():
-
-    path = sys.argv[1].strip('/')
-    pm = imp.load_source('params', path + '/params.py')
+def get_onetime_work(path, pm):
+    """Given work path and an object bundling the VN parameters (usually extracted from a params.py file), return the onetime work as a tuple (context_work, content_work)."""
     edges_filename = path + '/' + pm.edges_filename
     attr_filename = path + '/' + pm.attr_filename
     filenames = os.listdir(path)
@@ -107,7 +104,12 @@ def main():
         return (context_features, text_attr_features_by_type)
     else:
         return (A, text_attr_pfas_by_type)
- 
+
+
+def main():
+    path = sys.argv[1].strip('/')
+    pm = imp.load_source('params', path + '/params.py')
+    return get_onetime_work(path, pm)
 
 if __name__ == "__main__":
     main()

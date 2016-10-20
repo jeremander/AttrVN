@@ -207,7 +207,6 @@ def main():
         # get all sparse matrices
         if pm.verbose:
             print("\nObtaining sparse matrices...")
-        (A, text_attr_pfas_by_type) = onetime_work
         text_attr_operators_by_type = {attr_type : a.make_uncollapsed_operator(pfa, attr_type, sim = pm.sim, delta = pm.delta, verbose = pm.verbose) for (attr_type, pfa) in text_attr_pfas_by_type.items()}
         sparse_ops = ([A] if pm.use_context else []) + list(text_attr_operators_by_type.values())
         if (pm.vn_method == 'randomwalk'):

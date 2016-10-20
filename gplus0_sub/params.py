@@ -1,4 +1,5 @@
 # paths
+nomination_path = 'selected_attrs.csv'  # filename of attributes to nominate
 edges_filename = 'undirected_edges.dat' 
 attr_filename = 'node_attributes.csv'    
 

@@ -31,8 +31,10 @@ def main():
     if (len(exp_paths) == 0):
         raise RuntimeError("No results from experiment %s." % experiment)
     exp_path = exp_paths[0]
+
     exps = suite.get_exps()
     params = suite.get_params(exp_path)  # get param dictionary for experiment
+    print(params)
     vars_by_type = defaultdict(set)
     for var in params:
         if isinstance(params[var], list):
@@ -46,6 +48,12 @@ def main():
     elif (experiment == 'randomwalk'):
         vars_by_distinguisher = {'xfacet' : 'info', 'yfacet' : 'randomwalk_score_style', 'color' : 'randomwalk_steps', 'linestyle' : 'score_fusion_style'}
         vars_for_title = ['info', 'combination_style', 'randomwalk_score_style', 'score_fusion_style', 'randomwalk_steps']
+    elif (experiment == 'diffusion'):
+        vars_by_distinguisher = {'xfacet' : 'info', 'yfacet' : 'diffusion_bias', 'linestyle' : 'score_fusion_style'}
+        vars_for_title = ['info', 'combination_style', 'diffusion_bias', 'score_fusion_style']
+    elif (experiment == 'compare'):
+        vars_by_distinguisher = {'yfacet' : 'info', 'xfacet' : 'vn_method', 'color' : 'randomwalk_steps'}
+        vars_for_title = ['classifier', 'score_fusion_style']
 
     vars_for_title = [var for var in vars_for_title if (var in params)]
     vars_to_suppress_in_legend = ['info', 'classifier']  # show values but not variable names
@@ -78,7 +86,7 @@ def main():
 
     outer_dict_iter = ({var : val for (var, val) in zip(vars_by_type['outer'], param_tuple)} for param_tuple in itertools.product(*[params[var1] for var1 in vars_by_type['outer']]))
     for outer_dict in outer_dict_iter:
-        #print(outer_dict)
+        print(outer_dict)
         numvals_by_distinguisher = {dist : len(params[var]) if isinstance(params[var], list) else 1 for (dist, var) in vars_by_distinguisher.items()}
         for dist in vars_by_distinguisher.keys():
             if (numvals_by_distinguisher[dist] > max_numvals_by_distinguisher[dist]):
@@ -99,8 +107,7 @@ def main():
             plot_title += ' (%s%s%s)' % (('+' + str(pair[0])) if pair[0] else '', ', ' if all(pair) else '', ('-' + str(pair[1])) if pair[1] else '')
         plot_title += '\n'
 
-        plt.figure(0)
-        plt.clf()
+        plt.close('all')
         plot_fail = False
         fig, axis_grid = plt.subplots(numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet'], sharex = 'col', sharey = 'row', figsize = (12, 8), facecolor = 'white')
         axis_grid = np.array(axis_grid).reshape((numvals_by_distinguisher['yfacet'], numvals_by_distinguisher['xfacet']))
@@ -128,7 +135,7 @@ def main():
                             stderr_prec = np.array(suite.get_values_fix_params(exp_path, 0, 'stderr_prec', 'last', **loopvar_dict)[0][0]['stderr_prec'])
                             num_test = len(mean_prec)
                             max_num_test = max(max_num_test, num_test)
-                        except TypeError:
+                        except:
                             print("Warning: file error for params...")
                             print(loopvar_dict)
                             print()
@@ -189,6 +196,7 @@ def main():
         plt.subplots_adjust(left = 0.11, right = 0.85)
 
         plot_path = exp_path + '/plots/' + ('%s=%s' % (nom_attr_type, nom_attr_val)) + ',' + ','.join(['='.join(map(str, pair)) for pair in sorted(plot_params.items())]) + '.png'
+        print(plot_path)
         plt.savefig(plot_path)
         #plt.show()
 

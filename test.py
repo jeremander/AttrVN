@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
 from kde import TwoClassKDE
+from scipy.sparse.linalg import cg
 from attr_vn import *
 from copy import deepcopy
 
@@ -40,7 +41,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         param_module = imp.load_source('params', self.path + '/params.py')
         self.pm = TestParams()
         pm = self.pm
-        for var in dir(param_module):
+        for var in dir(param_module):  # builtin vars pollute the namespace; filter them out
             if (not var.startswith('__')):
                 pm.__dict__[var] = param_module.__dict__[var]
         pm.verbosity = 1 if pm.verbose else 0
@@ -68,37 +69,43 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         if (pm.verbosity >= 1):
             print(time_format(time.time() - start_time))
 
-        # load the one-time work
-        self.onetime_work = onetime.main()
-        self.n = self.onetime_work[0].shape[0]  # the number of nodes
+        # load the one-time work (for both embedding & randomwalk)
+        vn_method = pm.vn_method
+        pm.vn_method = 'embedding'
+        (self.context_features, self.text_attr_features_by_type) = onetime.get_onetime_work(self.path, pm)
+        pm.vn_method = 'randomwalk'
+        (self.A, self.text_attr_pfas_by_type) = onetime.get_onetime_work(self.path, pm)
+        pm.vn_method = vn_method
+
+        self.n = self.context_features.shape[0]  # the number of nodes
 
         # create AttributeAnalyzer
         if (pm.verbosity >= 1):
            print("\nCreating AttributeAnalyzer...")
         self.aa = timeit(AttributeAnalyzer, pm.verbosity >= 1)(attr_filename, self.n, self.text_attr_types)
 
-        # prepare the one-time work
-        if (pm.vn_method != 'embedding'):
-            # make the appropriate sparse linear operators
-            if (pm.verbosity >= 1):
-                print("\nMaking SparseLinearOperators...")
-            (A, text_attr_pfas_by_type) = self.onetime_work
-            text_attr_operators_by_type = {at : self.aa.make_uncollapsed_operator(pfa, at, sim = pm.sim, delta = pm.delta, verbose = (pm.verbosity >= 1)) for (at, pfa) in text_attr_pfas_by_type.items()}
-            f = SparseLinearOperator.to_column_stochastic if (pm.vn_method == 'randomwalk') else SparseLaplacian
-            self.context_op = A.to_column_stochastic()
-            self.content_ops = [f(op) for op in text_attr_operators_by_type.values()]
+        # make the appropriate sparse linear operators
+        if (pm.verbosity >= 1):
+            print("\nMaking SparseLinearOperators...")
+        text_attr_operators_by_type = {at : self.aa.make_uncollapsed_operator(pfa, at, sim = pm.sim, delta = pm.delta, verbose = (pm.verbosity >= 1)) for (at, pfa) in self.text_attr_pfas_by_type.items()}
+        self.context_rw = self.A.to_column_stochastic()
+        self.content_rws = [text_attr_operators_by_type[at].to_column_stochastic() for at in self.text_attr_types]
+        self.context_laplacian = SparseLaplacian(self.A)
+        self.content_laplacians = [SparseLaplacian(text_attr_operators_by_type[at]) for at in self.text_attr_types]
+
+        # load the attribute file
+        self.nom_attr_df = pd.read_csv(self.path + '/' + pm.nomination_path)
 
     def reset(self, params, rep):
         self.pm.__dict__.update(params)  # overwrite default params with test parameters
         pm = self.pm
         if (pm.verbosity >= 1):
-            print("\nStarting experiment with params...")
+            print("\nStarting experiment %d of %d with params..." % (params['***EXP_NUM***'], self.num_experiments_))
             print_params(params)
 
         # read nomination attributes & their types from a file
-        nom_attr_df = pd.read_csv(self.path + '/' + pm.nomination_path)
-        nomination_attr_type = nom_attr_df['attributeType'][pm.nom_ind]
-        nomination_attr_val = nom_attr_df['attribute'][pm.nom_ind]
+        nomination_attr_type = self.nom_attr_df['attributeType'][pm.nom_ind]
+        nomination_attr_val = self.nom_attr_df['attribute'][pm.nom_ind]
 
         # distinguish text/numeric predictor types from nomination type
         self.predictor_attr_types = [at for at in self.attr_types if (at != nomination_attr_type)] # all predictor attribute types
@@ -110,8 +117,9 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         self.true_seeds, self.false_seeds = self.ind[self.ind == 1].index, self.ind[self.ind == 0].index
         self.all_seeds = set(self.true_seeds).union(set(self.false_seeds))
         self.num_true_seeds, self.num_false_seeds = len(self.true_seeds), len(self.false_seeds)
+        self.num_seeds = self.num_true_seeds + self.num_false_seeds
         if (pm.verbosity >= 1):
-            print("\n%d known instances of %s (%d +%s, %d -%s)" % (self.num_true_seeds + self.num_false_seeds, nomination_attr_type, self.num_true_seeds, nomination_attr_val, self.num_false_seeds, nomination_attr_val))
+            print("\n%d known instances of %s (%d +%s, %d -%s)" % (self.num_seeds, nomination_attr_type, self.num_true_seeds, nomination_attr_val, self.num_false_seeds, nomination_attr_val))
         if ((pm.num_true_samps > self.num_true_seeds) or (pm.num_false_samps > self.num_false_seeds)):
             print("\nWarning: not enough seed instances. Skipping experiment.")
             self.invalid_option = True
@@ -123,7 +131,6 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
         # prepare the algorithm
         if (pm.vn_method == 'embedding'):
-            (context_features, text_attr_features_by_type) = deepcopy(self.onetime_work)
 
             # construct classifier
             if (pm.classifier == 'logreg'):
@@ -131,7 +138,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
             elif (pm.classifier == 'naive_bayes'):
                 self.clf = GaussianNB()
             elif (pm.classifier == 'randfor'):
-                self.clf = RandomForestClassifier(n_estimators = pm.num_trees, n_jobs = pm.n_jobs)
+                self.clf = RandomForestClassifier(n_estimators = pm.num_trees, n_jobs = 1)
             elif (pm.classifier == 'boost'):
                 self.clf = AdaBoostClassifier(n_estimators = pm.num_trees)
             elif (pm.classifier == 'kde'):
@@ -149,13 +156,13 @@ class AttrVNExperimentSuite(PyExperimentSuite):
             mats = []
             if (pm.info != 'content'):
                 if pm.sphere_context:
-                    normalize_mat_rows(context_features)
-                mats.append(context_features)
+                    normalize_mat_rows(self.context_features)
+                mats.append(self.context_features)
             if (pm.info != 'context'):
                 for at in self.text_predictor_attr_types:
                     if pm.sphere_content:
-                        normalize_mat_rows(text_attr_features_by_type[at])
-                    mats.append(text_attr_features_by_type[at])
+                        normalize_mat_rows(self.text_attr_features_by_type[at])
+                    mats.append(self.text_attr_features_by_type[at])
             if (len(self.num_attr_types)):
                 # impute missing numeric data (using naive mean or median of known values)
                 imputer = Imputer(strategy = pm.imputation)
@@ -188,11 +195,18 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
             self.sparse_ops = []
             if (pm.info != 'content'):
-                self.sparse_ops.append(self.context_op)
+                context_op = self.context_rw if (pm.vn_method == 'randomwalk') else self.context_laplacian
+                self.sparse_ops.append(context_op)
             if (pm.info != 'context'):
-                self.sparse_ops += self.content_ops
+                content_ops = self.content_rws if (pm.vn_method == 'randomwalk') else self.content_laplacians
+                self.sparse_ops += [op for (i, op) in enumerate(content_ops) if (self.text_attr_types[i] != nomination_attr_type)]
             if (pm.combination_style == 'mean'):  # average all the matrices
                 self.sparse_ops = [(1.0 / len(self.sparse_ops)) * reduce(lambda x, y : x + y, self.sparse_ops)]
+            if (pm.vn_method == 'diffusion'):
+                self.rect_I = scipy.sparse.lil_matrix((self.num_seeds, self.n), dtype = float)
+                for i in range(self.num_seeds):
+                    self.rect_I[i, i] = 1.0
+                self.rect_I = SparseLinearOperator(self.rect_I)
 
         # set up data arrays to save
         self.prec_df = pd.DataFrame(columns = range(params['iterations']))
@@ -251,22 +265,23 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                     seed_temps /= np.abs(seed_temps).max()
                 else:
                     seed_temps = np.array([-1.0, 1.0])
-                mean_temp = (self.num_false_seeds * seed_temps[0] + self.num_true_seeds * seed_temps[1]) / self.n
-                unobserved_flags = ~(ind >= 0)
+                unobserved_flags = np.ones(self.n, dtype = bool)
+                unobserved_flags[training] = False
+                unobserved_nodes = unobserved_flags.nonzero()[0]
+                T0 = np.zeros(n, dtype = float)
+                for i in fs:
+                    T0[i] = seed_temps[0]
+                for i in ts:
+                    T0[i] = seed_temps[1]
+                P = PermutationOperator(np.concatenate([training, unobserved_nodes]))
+                T0 = (P * T0)[:num_seeds]
+                F_seed = RowSelectorOperator(num_seeds, n, range(num_seeds))
+                F_nonseed = RowSelectorOperator(n - num_seeds, n, range(num_seeds, n))
                 for (j, L) in enumerate(self.sparse_ops):
-                    temps = mean_temp * np.ones(self.n)
-                    for i in fs:
-                        temps[i] = seed_temps[0]
-                    for i in ts:
-                        temps[i] = seed_temps[1]
-                    counter = itertools.count() if (pm.diffusion_max_iters is None) else range(pm.diffusion_max_iters)
-                    for t in counter:
-                        dt_temp = -L * temps * unobserved_flags
-                        temps += pm.diffusion_rate * dt_temp
-                        error = pm.diffusion_rate * np.linalg.norm(dt_temp)
-                        if (error < pm.diffusion_tol):
-                            break
-                    scores[:, j] = temps
+                    Lp = P * (SparseLaplacian(self.sparse_adjacency_operator) * P.inv())
+                    b = -(F_nonseed * (Lp * (F_seed.transpose() * T0)))
+                    A = F_nonseed * (Lp * F_nonseed.transpose())
+                    scores[:, j] = cg(A, b, tol = pm.diffusion_tol)[0]
             if (pm.score_fusion_style == 'mean'):
                 df['score'] = scores.mean(axis = 1)[test]
             else:  # 'max'

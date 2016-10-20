@@ -181,6 +181,8 @@ class SparseLaplacian(SymmetricSparseLinearOperator):
         LinearOperator.__init__(self, dtype = float, shape = A.shape)
     def _matvec(self, x):
         return (self.D * x - self.A.matvec(x))
+    def __getnewargs__(self):
+        return (self.A,)
 
 class SparseNormalizedLaplacian(SparseLaplacian):
     """Class representing the normalized Laplacian (D^(-1/2) * A * D^(-1/2))."""
@@ -272,4 +274,57 @@ class JointSymmetricBlockOperator(SymmetricSparseLinearOperator):
         SymmetricSparseLinearOperator.__init__(self, joint_block_operator)
         def __getnewargs__(self):
             return (self.diag_blocks, self.tau)
+
+
+class RowSelectorOperator(SparseLinearOperator):
+    """Given a dimension n and a dictionary mapping rows to indices (for m rows), creates an operator representing the m x n matrix selecting the entries at the given indices. Rows with no indices listed provide an entry of 0. Alternatively if ind_map is a list of indices, there will be no zero rows."""
+    def __init__(self, m, n, ind_map):
+        self.m, self.n = m, n
+        if isinstance(ind_map, (list, range, np.ndarray)):
+            ind_map = dict(enumerate(ind_map))
+        self.ind_map = ind_map
+        s = set(ind_map.values())
+        assert all([0 <= i < n for i in s])
+        num_entries = len(ind_map)
+        self.unique = (num_entries == len(s))
+        self.row_map = np.zeros((num_entries, 2), dtype = int)
+        for (ctr, item) in enumerate(sorted(ind_map.items(), key = lambda pair : pair[0])):
+            self.row_map[ctr] = item
+        LinearOperator.__init__(self, dtype = float, shape = (m, n))
+    def _matvec(self, x):
+        y = np.zeros(self.shape[0], dtype = x.dtype)
+        y[self.row_map[:, 0]] = x[self.row_map[:, 1]]
+        return y
+    def _transpose(self):
+        m = self.shape[0]
+        if self.unique:
+            return RowSelectorOperator(self.n, self.m, {i : row for (row, i) in self.row_map})
+        else:
+            F = lil_matrix((self.n, self.m), dtype = float)
+            for (row, i) in self.row_map:
+                F[i, row] = 1.0
+            return SparseLinearOperator(F)
+    def __getnewargs__(self):
+        return (self.m, self.n, self.ind_map)
+
+class PermutationOperator(RowSelectorOperator):
+    def __init__(self, perm):
+        """Given a permutation on n indices, constructs the n x n permutation matrix selecting rows in the permutation order."""
+        self.n = len(perm)
+        assert all([0 <= i < self.n for i in perm])
+        assert (self.n == len(set(perm)))
+        self.perm = np.asarray(perm)
+        LinearOperator.__init__(self, dtype = float, shape = (self.n, self.n))
+    def _matvec(self, x):
+        return x[self.perm]
+    def _transpose(self):
+        inv_perm = np.zeros(self.n, dtype = int)
+        for (i, j) in enumerate(self.perm):
+            inv_perm[j] = i
+        return PermutationOperator(inv_perm)
+    def inv(self):
+        return self.transpose()
+    def __getnewargs__(self):
+        return (self.perm,)
+
 

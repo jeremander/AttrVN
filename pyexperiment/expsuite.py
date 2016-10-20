@@ -563,8 +563,11 @@ class PyExperimentSuite(object):
         explist = []
             
         # expand paramlist for all repetitions and add self and rep number
-        for p in paramlist:
+        for (i, p) in enumerate(paramlist):  # track number of the experiment
+            p['***EXP_NUM***'] = i
             explist.extend(zip( [self]*p['repetitions'], [p]*p['repetitions'], range(p['repetitions']) ))
+
+        self.num_experiments_ = len(explist)
                 
         # if only 1 process is required call each experiment seperately (no worker pool)
         if self.options.ncores == 1:
