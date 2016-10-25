@@ -3,6 +3,7 @@ import onetime
 import imp
 import itertools
 import time
+import os
 from pyexperiment.expsuite import PyExperimentSuite, ListWithNoSpaces
 from sklearn.preprocessing import Imputer, StandardScaler
 from sklearn.naive_bayes import GaussianNB
@@ -10,7 +11,7 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
 from kde import TwoClassKDE
-from scipy.sparse.linalg import cg
+from scipy.sparse.linalg import minres
 from attr_vn import *
 from copy import deepcopy
 
@@ -35,19 +36,15 @@ class TestParams():
     pass
 
 class AttrVNExperimentSuite(PyExperimentSuite):
-    def __init__(self, path):
+    def __init__(self):
         super().__init__()
-        self.path = path
-        param_module = imp.load_source('params', self.path + '/params.py')
+        param_module = imp.load_source('params', 'params.py')
         self.pm = TestParams()
         pm = self.pm
         for var in dir(param_module):  # builtin vars pollute the namespace; filter them out
             if (not var.startswith('__')):
                 pm.__dict__[var] = param_module.__dict__[var]
         pm.verbosity = 1 if pm.verbose else 0
-
-        # get data path
-        attr_filename = self.path + '/' + pm.attr_filename
 
         # partition attribute types into text/discrete (str dtype) or numeric
         self.text_attr_types, self.num_attr_types = [], []
@@ -62,7 +59,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         if (pm.verbosity >= 1):
             print("Gathering numeric features...")
         start_time = time.time()
-        self.num_df = pd.read_csv(attr_filename, sep = ';')
+        self.num_df = pd.read_csv(pm.attr_filename, sep = ';')
         self.num_df = self.num_df[np.vectorize(lambda t : t in set(self.num_attr_types))(self.num_df['attributeType'])]
         self.num_df = self.num_df.pivot(index = 'node', columns = 'attributeType', values = 'attributeVal')
         self.num_df = self.num_df.convert_objects(convert_numeric = True)
@@ -72,9 +69,9 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         # load the one-time work (for both embedding & randomwalk)
         vn_method = pm.vn_method
         pm.vn_method = 'embedding'
-        (self.context_features, self.text_attr_features_by_type) = onetime.get_onetime_work(self.path, pm)
+        (self.context_features, self.text_attr_features_by_type) = onetime.get_onetime_work('.', pm)
         pm.vn_method = 'randomwalk'
-        (self.A, self.text_attr_pfas_by_type) = onetime.get_onetime_work(self.path, pm)
+        (self.A, self.text_attr_pfas_by_type) = onetime.get_onetime_work('.', pm)
         pm.vn_method = vn_method
 
         self.n = self.context_features.shape[0]  # the number of nodes
@@ -82,7 +79,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         # create AttributeAnalyzer
         if (pm.verbosity >= 1):
            print("\nCreating AttributeAnalyzer...")
-        self.aa = timeit(AttributeAnalyzer, pm.verbosity >= 1)(attr_filename, self.n, self.text_attr_types)
+        self.aa = timeit(AttributeAnalyzer, pm.verbosity >= 1)(pm.attr_filename, self.n, self.text_attr_types)
 
         # make the appropriate sparse linear operators
         if (pm.verbosity >= 1):
@@ -94,13 +91,13 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         self.content_laplacians = [SparseLaplacian(text_attr_operators_by_type[at]) for at in self.text_attr_types]
 
         # load the attribute file
-        self.nom_attr_df = pd.read_csv(self.path + '/' + pm.nomination_path)
+        self.nom_attr_df = pd.read_csv(pm.nomination_path)
 
     def reset(self, params, rep):
         self.pm.__dict__.update(params)  # overwrite default params with test parameters
         pm = self.pm
         if (pm.verbosity >= 1):
-            print("\nStarting experiment %d of %d with params..." % (params['***EXP_NUM***'], self.num_experiments_))
+            print("\n\n#################################################\nStarting experiment %d of %d with params...\n" % (params['***EXP_NUM***'], self.num_experiments_))
             print_params(params)
 
         # read nomination attributes & their types from a file
@@ -126,6 +123,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         if (pm.verbosity >= 1):
             print("Sampling %d positive seeds, %d negative seeds" % (pm.num_true_samps, pm.num_false_samps))
         self.num_pos_in_test = self.num_true_seeds - pm.num_true_samps
+        self.num_train = pm.num_true_samps + pm.num_false_samps
         self.num_test = self.num_true_seeds + self.num_false_seeds - pm.num_true_samps - pm.num_false_samps
         self.guess_rate = self.num_pos_in_test / self.num_test
 
@@ -202,11 +200,6 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                 self.sparse_ops += [op for (i, op) in enumerate(content_ops) if (self.text_attr_types[i] != nomination_attr_type)]
             if (pm.combination_style == 'mean'):  # average all the matrices
                 self.sparse_ops = [(1.0 / len(self.sparse_ops)) * reduce(lambda x, y : x + y, self.sparse_ops)]
-            if (pm.vn_method == 'diffusion'):
-                self.rect_I = scipy.sparse.lil_matrix((self.num_seeds, self.n), dtype = float)
-                for i in range(self.num_seeds):
-                    self.rect_I[i, i] = 1.0
-                self.rect_I = SparseLinearOperator(self.rect_I)
 
         # set up data arrays to save
         self.prec_df = pd.DataFrame(columns = range(params['iterations']))
@@ -268,20 +261,21 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                 unobserved_flags = np.ones(self.n, dtype = bool)
                 unobserved_flags[training] = False
                 unobserved_nodes = unobserved_flags.nonzero()[0]
-                T0 = np.zeros(n, dtype = float)
+                T0 = np.zeros(self.n, dtype = float)
                 for i in fs:
                     T0[i] = seed_temps[0]
                 for i in ts:
                     T0[i] = seed_temps[1]
                 P = PermutationOperator(np.concatenate([training, unobserved_nodes]))
-                T0 = (P * T0)[:num_seeds]
-                F_seed = RowSelectorOperator(num_seeds, n, range(num_seeds))
-                F_nonseed = RowSelectorOperator(n - num_seeds, n, range(num_seeds, n))
+                T0 = (P * T0)[:self.num_train]
+                F_seed = RowSelectorOperator(self.num_train, self.n, range(self.num_train))
+                F_nonseed = RowSelectorOperator(self.n - self.num_train, self.n, range(self.num_train, self.n))
                 for (j, L) in enumerate(self.sparse_ops):
-                    Lp = P * (SparseLaplacian(self.sparse_adjacency_operator) * P.inv())
+                    Lp = P * L * P.inv()
                     b = -(F_nonseed * (Lp * (F_seed.transpose() * T0)))
                     A = F_nonseed * (Lp * F_nonseed.transpose())
-                    scores[:, j] = cg(A, b, tol = pm.diffusion_tol)[0]
+                    Tsol = minres(A, b, tol = pm.diffusion_tol)[0]
+                    scores[:, j] = P.inv() * np.concatenate([T0, Tsol])
             if (pm.score_fusion_style == 'mean'):
                 df['score'] = scores.mean(axis = 1)[test]
             else:  # 'max'
@@ -314,5 +308,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
 
 if __name__ == "__main__":
-    test_suite = AttrVNExperimentSuite(sys.argv[1])
+    print('cd %s\n' % sys.argv[1])
+    os.chdir(sys.argv[1])
+    test_suite = AttrVNExperimentSuite()
     test_suite.start()

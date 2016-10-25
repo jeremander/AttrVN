@@ -1,10 +1,12 @@
 import optparse
 import itertools
 import matplotlib.pyplot as plt
+import os
 from test import *
 from rstyle import *
 from expsuite import convert_param_to_dirname
 from collections import defaultdict
+from configparser import ConfigParser
 
 
 distinguishers = ['xfacet', 'yfacet', 'linestyle', 'color']
@@ -22,19 +24,18 @@ def main():
     p = optparse.OptionParser()
     p.add_option('--experiment', '-e', type = str, help = 'experiment name')
     opts, args = p.parse_args()
+    os.chdir(sys.argv[1])
 
     experiment = opts.experiment
 
     # Get & organize variables for experiment
     suite = PyExperimentSuite()
-    exp_paths = suite.get_exp(experiment)
-    if (len(exp_paths) == 0):
-        raise RuntimeError("No results from experiment %s." % experiment)
-    exp_path = exp_paths[0]
+    exp_path = 'results/' + experiment
+    cfgp = ConfigParser()
+    cfgp.optionxform = str
+    cfgp.read('experiments.cfg')
+    params = suite.items_to_params(cfgp.items(experiment))
 
-    exps = suite.get_exps()
-    params = suite.get_params(exp_path)  # get param dictionary for experiment
-    print(params)
     vars_by_type = defaultdict(set)
     for var in params:
         if isinstance(params[var], list):
@@ -52,7 +53,7 @@ def main():
         vars_by_distinguisher = {'xfacet' : 'info', 'yfacet' : 'diffusion_bias', 'linestyle' : 'score_fusion_style'}
         vars_for_title = ['info', 'combination_style', 'diffusion_bias', 'score_fusion_style']
     elif (experiment == 'compare'):
-        vars_by_distinguisher = {'yfacet' : 'info', 'xfacet' : 'vn_method', 'color' : 'randomwalk_steps'}
+        vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'vn_method'}
         vars_for_title = ['classifier', 'score_fusion_style']
 
     vars_for_title = [var for var in vars_for_title if (var in params)]
@@ -61,13 +62,15 @@ def main():
     # Determine which variables are constant and which actually vary
     dists_to_delete = []
     for var in vars_by_type['iter']:
-        if (len(params[var]) == 1):
-            vars_by_type['constant'].add(var)
-            params[var] = params[var][0]
-            for (dist, var1) in vars_by_distinguisher.items():
-                if (var1 == var):
-                    dists_to_delete.append(dist)
-        elif (var not in vars_by_distinguisher.values()):
+        # if (len(params[var]) == 1):
+        #     vars_by_type['constant'].add(var)
+        #     params[var] = params[var][0]
+        #     for (dist, var1) in vars_by_distinguisher.items():
+        #         if (var1 == var):
+        #             dists_to_delete.append(dist)
+        # elif (var not in vars_by_distinguisher.values()):
+        #     vars_by_type['outer'].add(var)
+        if (var not in vars_by_distinguisher.values()):
             vars_by_type['outer'].add(var)
     for dist in dists_to_delete:  # delete any distinguishing vars that have no iteration
         del(vars_by_distinguisher[dist])
@@ -80,7 +83,7 @@ def main():
     vars_for_title = [var for var in vars_for_title if (var not in vars_by_type['inner'])]
 
     # read the attribute types & values
-    nom_attr_df = pd.read_csv(sys.argv[1] + '/' + params['nomination_path'])
+    nom_attr_df = pd.read_csv(params['nomination_path'])
     nomination_attr_type = nom_attr_df['attributeType'][params['nom_ind']]
     nomination_attr_val = nom_attr_df['attribute'][params['nom_ind']]
 
