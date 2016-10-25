@@ -23,6 +23,8 @@ from configparser import ConfigParser
 from multiprocessing import Process, Pool, cpu_count
 from numpy import *
 import os, sys, time, itertools, re, optparse, types
+import pickle
+import subprocess
 
 def mp_runrep(args):
     """ Helper function to allow multiprocessing support. """
@@ -100,6 +102,18 @@ class PyExperimentSuite(object):
         optparser.add_option('-p', '--progress',
             action='store_true', dest='progress', default=False, 
             help="like browse, but only shows name and progress bar")
+        optparser.add_option('--sge',
+            action='store_true', dest='sge', default=False,
+            help="split into multiple jobs using Sun Grid Engine")
+        optparser.add_option('-j', '--jobs',
+            action='store', dest='njobs', type='int', default=1,
+            help="number of jobs")
+        optparser.add_option('-G', '--gigs', 
+            action='store', dest='gigs', type='int', default=32,
+            help="gigabytes of memory")
+        optparser.add_option('-H', '--hours',
+            action='store', dest='hours', type='int', default=24,
+            help="hours of grid time")
 
         options, args = optparser.parse_args()
         self.options = options
@@ -540,15 +554,18 @@ class PyExperimentSuite(object):
                 params['name'] = exp
                 paramlist.append(params)
 
+        paramlist = self.expand_param_list(paramlist)
         self.do_experiment(paramlist)
                 
     
-    def do_experiment(self, params):
+    def do_experiment(self, paramlist):
         """ runs one experiment programatically and returns.
             params: either parameter dictionary (for one single experiment) or a list of parameter
             dictionaries (for several experiments).
         """
-        paramlist = self.expand_param_list(params)
+
+        if (self.options.sge):  # grid array job
+            self.send_jobs_to_grid(paramlist)
         
         # create directories, write config files
         for pl in paramlist:
@@ -578,9 +595,29 @@ class PyExperimentSuite(object):
             pool = Pool(processes=self.options.ncores)
             pool.map(mp_runrep, explist)
         
-        return True        
-        
-       
+        return True    
+
+    def send_jobs_to_grid(self, paramlist):
+        num_exps = len(paramlist)
+        exps_per_job = num_exps // self.options.njobs
+        perm = random.permutation(num_exps)
+        self.mkdir('tmp')
+        pickle.dump(self, open('tmp/suite.pickle', 'wb'))
+        for i in range(self.options.njobs):
+            pickle.dump([paramlist[j] for j in range(i * exps_per_job, (i + 1) * exps_per_job)], open('tmp/params%d.pickle' % i, 'wb'))
+        script = """
+        if __name__ == '__main__':
+            import pickle
+            import os
+            suite = pickle.load(open('tmp/suite.pickle', 'rb'))
+            paramlist = pickle.load(open('tmp/params%d.pickle' % os.environ['SGE_TASK_ID'], 'rb'))
+            suite.options.sge = False
+            suite.do_experiment(paramlist)
+        """
+        open('tmp/script.py', 'w').write(script)
+        cmd = "qsub -t 1-%d -q all.q -l num_proc=%d,mem_free=%dG,h_rt=%d:00:00 -b Y -V cwd -j yes -o tmp -N experiment 'python3 tmp/script.py'" % (self.options.njobs, self.options.ncores, self.options.gigs, self.options.hours)
+        print(cmd)
+        #subprocess.Popen(cmd, shell = True, stdout = subprocess.PIPE)       
     def run_rep(self, params, rep):
         """ run a single repetition including directory creation, log files, etc. """
         name = params['name']
