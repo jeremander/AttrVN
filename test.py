@@ -309,6 +309,8 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
 if __name__ == "__main__":
     print('cd %s\n' % sys.argv[1])
+    this_path = os.path.abspath(__file__)
     os.chdir(sys.argv[1])
     test_suite = AttrVNExperimentSuite()
+    test_suite.module_path_ = this_path
     test_suite.start()
