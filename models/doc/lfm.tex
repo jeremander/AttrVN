@@ -1,0 +1,50 @@
+\documentclass[11pt, oneside, fleqn]{article}   	% use "amsart" instead of "article" for AMSLaTeX format
+\usepackage{geometry}                		% See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper, margin=1.1in}  
+%\geometry{landscape}                		% Activate for for rotated page geometry
+\usepackage[parfill]{parskip}    		% Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}				% Use pdf, png, jpg, or eps§ with pdflatex; use eps in DVI mode
+								% TeX will automatically convert eps --> pdf in pdflatex		
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage{mathtools}
+\usepackage{enumerate}
+\usepackage{fancyhdr}
+\usepackage{dsfont}
+\pagestyle{fancy}
+
+\graphicspath{ {plots/} }
+
+\theoremstyle{plain} 
+\newtheorem{theorem}{Theorem} 
+\newtheorem{lemma}{Lemma} 
+
+\newcommand{\given}{\; | \;}
+\newcommand{\st}{\, : \,}
+\newcommand{\reals}{\mathbb{R}}
+\newcommand{\powerset}{\mathcal{P}}
+\newcommand{\sgn}{\text{sgn}}
+\renewcommand{\arraystretch}{1.5}
+\newcommand{\logodds}{\text{logodds}}
+\newcommand{\normal}{\mathcal{N}}
+
+\lhead{Jeremy Silver}
+\rhead{Mar.\ 9, 2016}
+
+\begin{document}
+%\maketitle
+
+\section{Latent Factor Model (Single Graph)}
+\begin{align*}
+\logodds(y_{ij}) & = \theta_{ij} \\
+\theta_{ij} & = \mu + u_i^T D u_j + s_i + s_j + \epsilon_{ij} \\
+\mu & \sim \normal(0, \, \sigma^2) \\
+d_{ii} & \sim \normal(0, \, \sigma_D^2) \\
+U_i & \sim \text{MVN}(0, \, \sigma_U^2 I) \\
+s_i & \sim \normal(0, \, \sigma_s^2) \\
+\epsilon_{ij} & \sim \normal(0, \, \sigma_{\epsilon}^2) \\
+\end{align*}
+
+\end{document}  
