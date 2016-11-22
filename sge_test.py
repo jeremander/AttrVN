@@ -34,6 +34,7 @@ def main():
         help="run only selected experiments, by default run all experiments in config file.")
 
     opts, args = optparser.parse_args()
+    assert (len(opts.experiments) == 1), "Can only do one experiment at a time."
 
     print('cd %s\n' % sys.argv[1])
     os.chdir(sys.argv[1])
@@ -46,27 +47,34 @@ def main():
             params = suite.items_to_params(suite.cfgparser.items(exp))
             params['name'] = exp
             paramlist.append(params)
+    iter_vars = [var for (var, val) in paramlist[0].items() if isinstance(val, list)]
 
     paramlist = suite.expand_param_list(paramlist)
     num_exps = len(paramlist)
     exps_per_job = num_exps // opts.njobs
     perm = np.random.permutation(num_exps)
     suite.mkdir('tmp')
+    chunksize = int(np.ceil(len(paramlist) / opts.njobs))
     for i in range(opts.njobs):
-        with open('tmp/experiment%d.cfg' % i, 'w') as f:
-            f.write('[experiment%d]\n' % i)
-            for (var, val) in paramlist[i].items():
-                f.write('%s = %s\n' % (var, str(val)))
+        #expnames = []
+        with open('tmp/experiments%d.cfg' % i, 'w') as f:
+            for j in range(chunksize):
+                ctr = i * chunksize + j
+                if (ctr < len(paramlist)):
+                    expname = opts.experiments[0] + '/' + ','.join(['%s=%s' % (var, val) for (var, val) in paramlist[ctr].items() if (var in iter_vars)])
+                    f.write('[%s]\n' % expname)
+                    for (var, val) in paramlist[ctr].items():
+                        valstr = ("'%s'" % val) if isinstance(val, str) else str(val)
+                        f.write('%s = %s\n' % (var, valstr))
+                    f.write('\n')
 
     os.chdir('..')
-    script = """
-#! /bin/bash
-EXP_NUM=`expr $SGE_TASK_ID - 1`
-python3 test.py %s -n 1 -c tmp/experiment$EXP_NUM.cfg -e experiment$EXP_NUM
-""" % sys.argv[1]
-    open("%s/tmp/script.sh" % sys.argv[1], 'w').write(script)
+    script = "#!/usr/bin/env python3\nimport os\ntask_id = int(os.environ['SGE_TASK_ID'])\ni = task_id - 1\nos.system('sleep %d' % (15 * i))\nos.system('python3 -u test.py " + sys.argv[1] + " -n 1 -c tmp/experiments%d.cfg' % i)\n"
+    filename = "%s/tmp/script.py" % sys.argv[1]
+    open(filename, 'w').write(script)
+    os.chmod(filename, 0o770)
 
-    cmd = "qsub -t 1-%d -q all.q -l num_proc=%d,mem_free=%dG,h_rt=%d:00:00 -b Y -V -cwd -j yes -o %s/tmp -N experiment '%s/tmp/script.sh'" % (opts.njobs, 1, opts.gigs, opts.hours, sys.argv[1], sys.argv[1])
+    cmd = "qsub -t 1-%d -q all.q -l num_proc=%d,mem_free=%dG,h_rt=%d:00:00 -b Y -V -cwd -j yes -o %s/tmp -N experiment '%s/tmp/script.py'" % (opts.njobs, 1, opts.gigs, opts.hours, sys.argv[1], sys.argv[1])
     print(cmd)
     subprocess.Popen(cmd, shell = True, stdout = subprocess.PIPE)
 

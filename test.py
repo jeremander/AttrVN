@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
 from kde import TwoClassKDE
-from scipy.sparse.linalg import minres
+from scipy.sparse.linalg import minres, bicgstab
 from attr_vn import *
 from copy import deepcopy
 
@@ -97,7 +97,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         self.pm.__dict__.update(params)  # overwrite default params with test parameters
         pm = self.pm
         if (pm.verbosity >= 1):
-            print("\n\n#################################################\nStarting experiment %d of %d with params...\n" % (params['***EXP_NUM***'], self.num_experiments_))
+            print("\n\n#################################################\nStarting experiment %d of %d with params...\n" % (params['***EXP_NUM***'] + 1, self.num_experiments_))
             print_params(params)
 
         # read nomination attributes & their types from a file
@@ -271,10 +271,13 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                 F_seed = RowSelectorOperator(self.num_train, self.n, range(self.num_train))
                 F_nonseed = RowSelectorOperator(self.n - self.num_train, self.n, range(self.num_train, self.n))
                 for (j, L) in enumerate(self.sparse_ops):
+                    print(j)
                     Lp = P * L * P.inv()
                     b = -(F_nonseed * (Lp * (F_seed.transpose() * T0)))
                     A = F_nonseed * (Lp * F_nonseed.transpose())
-                    Tsol = minres(A, b, tol = pm.diffusion_tol)[0]
+                    Dinv = DiagonalLinearOperator(1.0 / (P * L.D)[self.num_train:])  # only approximate inv-diagonal since adj matrix may have nonzero diagonal
+                    Tsol = bicgstab(A, b, x0 = b, M = Dinv, tol = pm.diffusion_tol)[0]
+                    # Tsol = minres(A, b, tol = pm.diffusion_tol)[0]
                     scores[:, j] = P.inv() * np.concatenate([T0, Tsol])
             if (pm.score_fusion_style == 'mean'):
                 df['score'] = scores.mean(axis = 1)[test]
@@ -309,8 +312,6 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
 if __name__ == "__main__":
     print('cd %s\n' % sys.argv[1])
-    this_path = os.path.abspath(__file__)
     os.chdir(sys.argv[1])
     test_suite = AttrVNExperimentSuite()
-    test_suite.module_path_ = this_path
     test_suite.start()

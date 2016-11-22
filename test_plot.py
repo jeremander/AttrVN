@@ -89,7 +89,7 @@ def main():
 
     outer_dict_iter = ({var : val for (var, val) in zip(vars_by_type['outer'], param_tuple)} for param_tuple in itertools.product(*[params[var1] for var1 in vars_by_type['outer']]))
     for outer_dict in outer_dict_iter:
-        print(outer_dict)
+        #print(outer_dict)
         numvals_by_distinguisher = {dist : len(params[var]) if isinstance(params[var], list) else 1 for (dist, var) in vars_by_distinguisher.items()}
         for dist in vars_by_distinguisher.keys():
             if (numvals_by_distinguisher[dist] > max_numvals_by_distinguisher[dist]):
@@ -118,6 +118,7 @@ def main():
         keys_for_legend = []
 
         inner_dict = dict()
+        max_prec = 0.0
         for x in range(numvals_by_distinguisher['xfacet']):
             if ('xfacet' in vars_by_distinguisher):
                 inner_dict[vars_by_distinguisher['xfacet']] = params[vars_by_distinguisher['xfacet']][x]
@@ -136,6 +137,7 @@ def main():
                         try:
                             mean_prec = np.array(suite.get_values_fix_params(exp_path, 0, 'mean_prec', 'last', **loopvar_dict)[0][0]['mean_prec'])
                             stderr_prec = np.array(suite.get_values_fix_params(exp_path, 0, 'stderr_prec', 'last', **loopvar_dict)[0][0]['stderr_prec'])
+                            max_prec = max(max_prec, np.max(mean_prec + 2 * stderr_prec))
                             num_test = len(mean_prec)
                             max_num_test = max(max_num_test, num_test)
                         except:
@@ -177,19 +179,22 @@ def main():
                     ax.annotate(legend_str(vars_by_distinguisher['yfacet'], str(params[vars_by_distinguisher['yfacet']][y]), vars_by_distinguisher['yfacet'] in vars_to_suppress_in_legend), xy = (0, 0.5), xytext = (-ax.yaxis.labelpad, 0), xycoords = ax.yaxis.label, textcoords = 'offset points', ha = 'right', va = 'center')
                 if ((numvals_by_distinguisher['xfacet'] > 1) and (y == 0)):
                     ax.annotate(legend_str(vars_by_distinguisher['xfacet'], str(params[vars_by_distinguisher['xfacet']][x]), vars_by_distinguisher['xfacet'] in vars_to_suppress_in_legend), xy = (0.5, 1.01), xytext = (0, 0), xycoords = 'axes fraction', textcoords = 'offset points', ha = 'center', va = 'baseline')
-                ax.set_xlim((0, max_num_test - 1))
-                ax.set_ylim((0.0, 1.0))
-                rstyle(ax)
-                ax.patch.set_facecolor('0.89')
             if plot_fail:
                 break
 
         if plot_fail:
             continue
 
+        for row in axis_grid:
+            for ax in row:
+                ax.set_xlim((0, max_num_test - 1))
+                ax.set_ylim((0.0, max(0.1, np.round(min(1.0, 1.1 * max_prec), 1))))
+                rstyle(ax)
+                ax.patch.set_facecolor('0.89')
+
         plot_params = dict_union({var : params[var] for var in vars_for_title}, outer_dict)
         this_plot_title = plot_title + ', '.join(['%s=%s' % (var, str(plot_params[var])) for var in vars_for_title])
-        print(plot_params)
+        #print(plot_params)
         #print(this_plot_title)
 
         fig.text(0.5, 0.04, 'rank', ha = 'center', fontsize = 14)

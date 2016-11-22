@@ -70,7 +70,6 @@ class PyExperimentSuite(object):
     restore_supported = False
     
     def __init__(self):
-        self.module_path_ = os.path.abspath(__file__)
 
         self.parse_opt()
         self.parse_cfg()
