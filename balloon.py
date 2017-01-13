@@ -6,13 +6,9 @@ from functools import reduce
 import unittest
 import pandas as pd
 import logging
+import time
 from logging import debug
 logging.basicConfig(level = logging.CRITICAL, format = '%(message)s')
-
-
-def flatten1(blocks):
-    """Flattens a list of lists by one level."""
-    return reduce(lambda x, y : x + y, blocks, [])
 
 def block_sort(items, key, reverse):
     """Given a list of items, sorts them, but groups them by tied items."""
@@ -20,6 +16,115 @@ def block_sort(items, key, reverse):
     for item in items:
         d[key(item)].append(item)
     return [d[k] for k in sorted(d.keys(), reverse = reverse)]
+
+
+class RankHierarchicalClustering():
+    """Class representing a set of indices associated with scores, clustered by equal score. When scores change, clusters are broken hierarchically (i.e. an index can change ranking with respect to its other cluster members, but not with respect to nonmembers. Breaking clusters ranks the new subclusters by decreasing score."""
+    def __init__(self, n, score0):
+        """Initialize all n scores to a constant (one cluster)."""
+        self.n = n
+        self.scores = score0 * np.ones(self.n, dtype = float)
+        self.ranked_indices = np.array(range(self.n))
+        self.ranks_by_index = np.array(range(self.n))
+        self.num_clusters = 1
+        self.cluster_sizes = [n]
+        self.cluster_starts = [0]  # starting points of clusters in ranked index list
+        self.cluster_scores = [score0]
+        self.clusters_by_index = np.zeros(self.n, dtype = int)
+        self.is_single = np.zeros(self.n, dtype = bool) if (self.n > 1) else np.array([True])
+    def change_score(self, i, new_score):
+        """Changes the score of index i, and readjusts the clustering accordingly. Returns list of indices that are new singletons."""
+        new_singletons = []
+        k = self.clusters_by_index[i]
+        if (self.is_single[i]):
+            self.cluster_scores[k] = new_score
+        else:
+            if (new_score != self.scores[i]):
+                is_less = new_score < self.scores[i]
+                rank = self.ranks_by_index[i]
+                self.is_single[i] = True
+                new_singletons.append(i)
+                size, start = self.cluster_sizes[k], self.cluster_starts[k]
+                new_rank = start + size - 1 if is_less else start
+                j = self.ranked_indices[new_rank]
+                self.ranked_indices[new_rank] = i
+                self.ranked_indices[rank] = j
+                self.ranks_by_index[i] = new_rank
+                self.ranks_by_index[j] = rank
+                self.cluster_sizes.append(1)
+                self.cluster_sizes[k] -= 1
+                self.cluster_starts.append(new_rank)
+                self.cluster_scores.append(new_score)
+                self.clusters_by_index[i] = self.num_clusters 
+                self.num_clusters += 1
+                if (self.cluster_starts[k] == new_rank):
+                    self.cluster_starts[k] += 1
+                if (self.cluster_sizes[k] == 1):
+                    i2 = self.ranked_indices[self.cluster_starts[k]]
+                    self.is_single[i2] = True
+                    new_singletons.append(i2)
+        self.scores[i] = new_score
+        return new_singletons
+    def change_scores(self, indices, new_scores):
+        """Changes the scores corresponding to the given indices, and readjusts the clustering accordingly. Returns list of indices that are new singletons."""
+        if (len(indices) == 1):
+            return self.change_score(indices[0], new_scores[0])
+        else:
+            new_singletons = []
+            new_scores_by_index = {i : new_score for (i, new_score) in zip(indices, new_scores)}
+            index_score_pairs_by_cluster = defaultdict(list)
+            for (i, new_score) in zip(indices, new_scores):
+                index_score_pairs_by_cluster[self.clusters_by_index[i]].append((i, new_score))
+            for (k, pairs) in index_score_pairs_by_cluster.items():
+                cluster_score = self.cluster_scores[k]
+                if (len(pairs) == 1):
+                    (i, new_score) = pairs[0]
+                    new_singletons += self.change_score(i, new_score)
+                else:
+                    new_cluster_score_pairs = block_sort(pairs, key = lambda pair : pair[1], reverse = True)
+                    for subpairs in new_cluster_score_pairs:
+                        new_score = subpairs[0][1]
+                        if (new_score != cluster_score):
+                            num_to_move = len(subpairs)
+                            indices_to_move = set([pair[0] for pair in subpairs])
+                            is_less = new_score < cluster_score
+                            size, start = self.cluster_sizes[k], self.cluster_starts[k]
+                            new_start = start + size - num_to_move if is_less else start
+                            for ii in range(new_start, new_start + num_to_move):
+                                i = self.ranked_indices[ii]
+                                if (i in indices_to_move):
+                                    indices_to_move.remove(i)
+                                    j = i
+                                else:
+                                    j = indices_to_move.pop()
+                                    jj = self.ranks_by_index[j]
+                                    self.ranked_indices[ii] = j
+                                    self.ranked_indices[jj] = i
+                                    self.ranks_by_index[i] = jj
+                                    self.ranks_by_index[j] = ii
+                                self.clusters_by_index[j] = self.num_clusters
+                                self.scores[j] = new_score
+                            if (num_to_move == 1):
+                                self.is_single[j] = True
+                                new_singletons.append(j)
+                            self.cluster_sizes.append(num_to_move)
+                            self.cluster_sizes[k] -= num_to_move
+                            self.cluster_starts.append(new_start)
+                            self.cluster_scores.append(new_score)
+                            self.num_clusters += 1
+                            if (self.cluster_starts[k] == new_start):
+                                self.cluster_starts[k] += num_to_move
+                            if (self.cluster_sizes[k] == 1):
+                                i2 = self.ranked_indices[self.cluster_starts[k]]
+                                self.is_single[i2] = True
+                                new_singletons.append(i2)
+        return new_singletons
+    def __repr__(self):
+        df = pd.DataFrame()
+        df['Score'] = self.scores
+        df['Cluster'] = self.clusters_by_index
+        df = df.loc[self.ranked_indices]
+        return str(df)
 
 
 class BalloonNominate():
@@ -36,45 +141,39 @@ class BalloonNominate():
         self.labels = (labels == 1)
         self.pos_seeds = self.seeds[self.labels]
         self.neg_seeds = self.seeds[~self.labels]
+        self.pos_seed_mags = np.square(np.linalg.norm(self.pos_seeds, axis = 1))
+        self.neg_seed_mags = np.square(np.linalg.norm(self.neg_seeds, axis = 1))
         self.s_plus = len(self.pos_seeds)
         self.s_minus = len(self.neg_seeds)
         self.s = self.s_plus + self.s_minus
     def get_dists(self, X):
-        """Given n points X, computes distances from all the s seed points. Returns (n x s) matrix of distances between points and seeds."""
         assert (X.shape[1] == self.m)
-        n = len(X)
-        dists = np.zeros((n, self.s), dtype = float)
-        for i in range(n):
-            for j in range(self.s_plus):
-                dists[i, j] = np.square(X[i] - self.pos_seeds[j]).sum()
-            for j in range(self.s_minus):
-                dists[i, self.s_plus + j] = np.square(X[i] - self.neg_seeds[j]).sum()
+        dists = np.zeros((X.shape[0], self.s), dtype = float)
+        point_mags = np.square(np.linalg.norm(X, axis = 1))
+        dists[:, :self.s_plus] = -2 * np.dot(X, self.pos_seeds.T) + self.pos_seed_mags[None, :]
+        dists[:, self.s_plus:] = -2 * np.dot(X, self.neg_seeds.T) + self.neg_seed_mags[None, :]
+        dists += point_mags[:, None]
         return dists
     def get_row_sorted_dists(self, X):
-        """Given n points, computes distances from all the s seed points. Returns (n x s) matrix of distances, where each row is sorted in increasing order, as well as a dictionary mapping each unique distance to dictionary from point indices to vector [num_pos, num_neg] of seeds having that distance from the point."""
-        assert (X.shape[1] == self.m)
-        n = len(X)
+        dists = self.get_dists(X)
+        sorted_dists_by_row = np.sort(dists, axis = 1)
         dist_dict = defaultdict(dict)
-        sorted_dists_by_row = np.zeros((n, self.s), dtype = float)
+        n = X.shape[0]
         for i in range(n):
+            row = dists[i]
             for j in range(self.s_plus):
-                dist = np.square(X[i] - self.pos_seeds[j]).sum()  # use squared dist to save computation time
-                #dist = np.linalg.norm(X[i] - self.pos_seeds[j])
-                sorted_dists_by_row[i, j] = dist
+                dist = row[j]
                 if (i in dist_dict[dist]):
                     dist_dict[dist][i][0] += 1
                 else:
                     dist_dict[dist][i] = [1, 0]
             for j in range(self.s_minus):
-                dist = np.square(X[i] - self.neg_seeds[j]).sum()
-                #dist = np.linalg.norm(X[i] - self.neg_seeds[j])
-                sorted_dists_by_row[i, self.s_plus + j] = dist
+                dist = row[self.s_plus + j]
                 if (i in dist_dict[dist]):
                     dist_dict[dist][i][1] += 1
                 else:
-                    dist_dict[dist][i] = [0, 1]
-            sorted_dists_by_row[i] = sorted(sorted_dists_by_row[i])
-        sorted_dists = np.array(sorted(dist_dict.keys()))
+                    dist_dict[dist][i] = [0, 1]    
+        sorted_dists = np.sort(list(dist_dict.keys()))
         return (sorted_dists, sorted_dists_by_row, dist_dict)
     def get_closest_points_to_seeds(self, X, N):
         """Returns N closest points to the set of positive seeds and N closest points to the set of negative seeds, sorted in order of increasing distance."""
@@ -158,87 +257,48 @@ class BalloonNominate():
         debug(sorted_dists)
         debug(sorted_dists_by_row)
         min_dist, max_dist = sorted_dists[0], sorted_dists[-1]
-        if self.deflate:
-            scores = (self.lamb * self.s_plus - (1 - self.lamb) * self.s_minus) * np.ones(n, dtype = float)
-        else:
-            scores = np.zeros(n, dtype = float)
-        ranked_list = np.array(range(n))  # ranking of the nodes
-        cluster_sizes = [n]  # cluster is a rank equivalence class
-        cluster_starts = [0]  # index in ranked_list where each cluster begins
-        nonsingletons = set(range(n))  # nodes not yet in a singleton cluster
-        cluster_by_row = np.zeros(n, dtype = int)
+        score0 = (self.lamb * self.s_plus - (1 - self.lamb) * self.s_minus) if self.deflate else 0.0
+        rhc = RankHierarchicalClustering(n, score0)
         ind_by_row = np.zeros(n, dtype = int)   # index of current dist in sorted_dists_by_row
         next_dist_by_row = sorted_dists_by_row[:, 0]  # array of next distance for each node to change its score
         done_marker = -np.inf if self.deflate else np.inf
-        while (len(cluster_sizes) < n):
-            new_cluster_sizes = defaultdict(list)  # maps each old cluster index to list of new subcluster sizes
+        while (not all(rhc.is_single)):
             next_dist = next_dist_by_row.max() if self.deflate else next_dist_by_row.min()
             if np.isinf(next_dist):  # +/-inf signifies no more nodes will change
                 break
-            rows_with_next_dist = set(np.nonzero(next_dist_by_row == next_dist)[0]).intersection(nonsingletons)
-            debug("nonsingletons: %s" % str(nonsingletons))
-            debug("cluster_by_row: %s" % str(cluster_by_row))
-            debug("cluster sizes: %s" % str(cluster_sizes))
-            debug("cluster starts: %s" % str(cluster_starts))
+            rows_with_next_dist = set(np.nonzero((next_dist_by_row == next_dist) & (~rhc.is_single))[0])
+            debug("\nnonsingletons: %s" % str([i for i in range(n) if ~rhc.is_single[i]]))
+            debug("cluster_by_row: %s" % str(rhc.clusters_by_index))
+            debug("cluster sizes: %s" % str(rhc.cluster_sizes))
+            debug("cluster starts: %s" % str(rhc.cluster_starts))
+            debug("ind_by_row: %s" % str(ind_by_row))
+            debug("next_dist_by_row: %s" % str(next_dist_by_row))
             debug("next_dist = %f" % next_dist)
             debug("rows: %s" % str(rows_with_next_dist))
-            for i in rows_with_next_dist:  # update scores of nodes with the given distance
+            indices = list(rows_with_next_dist)
+            new_scores = []
+            for i in indices:
                 diff = self.lamb * dist_dict[next_dist][i][0] - (1 - self.lamb) * dist_dict[next_dist][i][1]
-                if self.deflate:
-                    scores[i] -= diff
-                else:
-                    scores[i] += diff
-                ind = ind_by_row[i] + 1
-                while ((ind < self.s) and (sorted_dists_by_row[i, ind] == next_dist)):
-                    ind += 1
-                ind_by_row[i] = ind  # increment node's index in sorted dist array until it's a new distance
-                next_dist_by_row[i] = sorted_dists_by_row[i, ind] if (ind < self.s) else done_marker
-                debug("\ti = %d" % i)
-                debug("\tscores: %s" % str(scores))
-                debug("\tind_by_row: %s" % str(ind_by_row))
-                debug("\tnext_dist_by_row: %s" % str(next_dist_by_row))
-            clusters_to_split = {cluster_by_row[i] for i in rows_with_next_dist}
-            # debug("clusters_to_split: %s" % str(clusters_to_split))
-            for k in clusters_to_split:  # split clusters containing altered members
-                start, end = cluster_starts[k], cluster_starts[k] + cluster_sizes[k]
-                clust = ranked_list[start : end]
-                # can do this more efficiently by only considering nodes that changed
-                items = block_sort([(i, scores[i]) for i in clust], key = lambda pair : pair[1], reverse = True)
-                debug("\tk = %d" % k)
-                debug("\tclust: %s" % clust)
-                debug("\titems: %s" % items)
-                debug("\tranked list (before): %s" % ranked_list)
-                for newclust in items:
-                    new_cluster_sizes[k].append(len(newclust))
-                    if (len(newclust) == 1):
-                        i = newclust[0][0]
-                        nonsingletons.remove(i)
-                        next_dist_by_row[i] = done_marker  # this node is a singleton, so no longer considered
-                ranked_list[start : end] = [pair[0] for pair in flatten1(items)]
-                debug("\tranked list (after): %s" % ranked_list)
-            debug("\tnew cluster sizes: %s" % str(new_cluster_sizes))
-            for k in clusters_to_split:  # relabel the clusters
-                ctr = 0
-                for (j, size) in enumerate(new_cluster_sizes[k]):
-                    debug("(j, size): %s" % str((j, size)))
-                    if (j == 0):
-                        cluster_sizes[k] = size 
-                    else:
-                        cluster_sizes.append(size)
-                        cluster_starts.append(cluster_starts[k] + ctr)
-                        for i in range(cluster_starts[k] + ctr, cluster_starts[k] + ctr + size):
-                            cluster_by_row[ranked_list[i]] = len(cluster_sizes) - 1
-                    ctr += size
-        debug(cluster_sizes)
-        debug(ranked_list)
-        debug(cluster_starts)
-        debug(cluster_by_row)
-        num_clusters = len(cluster_sizes)
+                new_score = (rhc.scores[i] - diff) if self.deflate else (rhc.scores[i] + diff)
+                new_scores.append(new_score)
+            new_singletons = rhc.change_scores(indices, new_scores)
+            debug(rhc)
+            debug("is_single: %s" % str(rhc.is_single))
+            debug("new singletons: %s" % str(new_singletons))
+            for i in new_singletons:
+                next_dist_by_row[i] = done_marker
+            for i in indices:
+                if (not rhc.is_single[i]):
+                    ind = ind_by_row[i] + 1
+                    while ((ind < self.s) and (sorted_dists_by_row[i, ind] == next_dist)):
+                        ind += 1
+                    ind_by_row[i] = ind  # increment node's index in sorted dist array until it's a new distance
+                    next_dist_by_row[i] = sorted_dists_by_row[i, ind] if (ind < self.s) else done_marker
         scores = np.zeros((n, 2))
-        cluster_ranks = [pair[0] for pair in sorted(enumerate(cluster_starts), key = lambda pair : pair[1])]
+        cluster_ranks = [pair[0] for pair in sorted(enumerate(rhc.cluster_starts), key = lambda pair : pair[1])]
         ranks_by_cluster = {k : j for (j, k) in enumerate(cluster_ranks)}
         for i in range(n):
-            scores[i, 0] = ranks_by_cluster[cluster_by_row[i]] / (num_clusters - 1.0)
+            scores[i, 0] = ranks_by_cluster[rhc.clusters_by_index[i]] / (rhc.num_clusters - 1.0)
         scores[:, 1] = 1.0 - scores[:, 0]
         return scores
 
@@ -255,7 +315,7 @@ class TestBalloon(unittest.TestCase):
             seeds = np.random.randn(20, 50)
             labels = np.random.randint(0, 2, 20)
             X = np.random.randn(200, 50)     
-            true_ranked_list = [92, 151, 94, 172, 15, 118, 82, 154, 52, 84, 137, 27, 196, 192, 26, 39, 116, 173, 189, 139, 185, 104, 11, 70, 66, 7, 132, 133, 6, 165, 9, 169, 58, 119, 55, 144, 63, 153, 179, 152, 65, 38, 73, 97, 64, 95, 180, 199, 156, 162, 174, 109, 21, 134, 43, 13, 44, 188, 120, 79, 25, 187, 2, 103, 18, 77, 69, 16, 121, 122, 195, 30, 35, 181, 68, 145, 45, 1, 186, 47, 170, 59, 57, 83, 88, 85, 76, 48, 62, 67, 175, 127, 125, 81, 53, 112, 0, 107, 75, 191, 71, 105, 113, 86, 12, 102, 111, 80, 160, 49, 22, 42, 50, 143, 147, 128, 166, 61, 108, 135, 193, 41, 184, 161, 89, 177, 74, 114, 115, 3, 99, 93, 194, 14, 163, 5, 198, 131, 130, 37, 159, 164, 124, 168, 8, 126, 110, 51, 176, 29, 10, 96, 171, 32, 54, 190, 33, 183, 19, 106, 148, 46, 149, 72, 155, 23, 60, 100, 178, 28, 182, 56, 20, 90, 40, 24, 150, 87, 138, 141, 98, 91, 197, 78, 101, 146, 142, 36, 167, 123, 129, 140, 136, 34, 4, 117, 17, 158, 31, 157]   
+            true_ranked_list = [92, 151, 94, 172, 15, 118, 82, 154, 52, 84, 137, 27, 196, 192, 26, 39, 116, 173, 189, 139, 185, 104, 11, 70, 66, 7, 132, 133, 6, 165, 9, 169, 58, 119, 55, 144, 63, 153, 179, 152, 65, 38, 73, 97, 64, 95, 180, 199, 156, 162, 174, 109, 21, 134, 43, 13, 44, 188, 120, 79, 25, 187, 2, 103, 18, 77, 69, 16, 121, 122, 195, 30, 35, 181, 68, 145, 45, 1, 186, 47, 170, 59, 57, 83, 88, 85, 76, 48, 62, 67, 175, 127, 125, 81, 53, 112, 0, 107, 75, 191, 71, 105, 113, 86, 12, 102, 111, 80, 160, 49, 22, 42, 50, 143, 147, 128, 166, 61, 108, 135, 193, 41, 184, 161, 89, 177, 74, 114, 115, 3, 99, 93, 194, 14, 163, 5, 198, 131, 130, 37, 159, 164, 124, 168, 8, 126, 110, 51, 176, 29, 10, 96, 171, 32, 54, 190, 33, 183, 19, 106, 148, 46, 149, 72, 155, 23, 60, 100, 178, 28, 182, 56, 20, 90, 40, 24, 150, 87, 138, 141, 98, 91, 197, 78, 101, 146, 142, 36, 167, 123, 129, 140, 136, 34, 4, 117, 17, 158, 31, 157] 
         elif (testnum == 3):  # some equidistant points
             seeds = np.array([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype = float)
             labels = np.array([1, 1, 0, 0])
@@ -284,29 +344,20 @@ class TestBalloon(unittest.TestCase):
         print(true_ranked_list)
         print("\n" + str(ranked_list == true_ranked_list))
         self.assertTrue(ranked_list == true_ranked_list)
-    def test_time(self):
+    def test_time(self, nseeds = 100, npoints = 1000, dim = 50):
         np.random.seed(0)
-        seeds = np.random.randn(100, 50)
-        labels = np.random.randint(0, 2, 100)
-        X = np.random.randn(1000, 50)
+        seeds = np.random.randn(nseeds, dim)
+        labels = np.random.randint(0, 2, nseeds)
+        X = np.random.randn(npoints, dim)
+        start = time.time()
         infl = BalloonNominate(0.5, deflate = False)
         infl.fit(seeds, labels)
         scores = infl.predict_proba(X)[:, 1]
-        ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]                
+        end = time.time()
+        ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]
+        return end - start     
 
 
-
-# np.random.seed(0)
-# seeds = np.random.randn(4, 2)
-# labels = np.array([0, 0, 1, 1])
-# X = np.random.randn(6, 2)
-# infl = BalloonNominate(0.5, deflate = False)
-# infl.fit(seeds, labels)
-# defl = BalloonNominate(0.5, deflate = True)
-# defl.fit(seeds, labels)
-# import matplotlib.pyplot as plt 
-# plt.scatter(seeds[:, 0], seeds[:, 1], s = 100, c = labels)
-# plt.scatter(X[:, 0], X[:, 1], s = 100, c = 'black')
 
 path = 'benchmark/2class/'
 def get_data(name, s):
@@ -327,8 +378,10 @@ def get_mesh(data, k):
 import os
 names = [name.split('.')[0] for name in os.listdir(path)]
 name = 'square1'
-s = 50
-k = 51
+#s = 50
+#k = 51
+s = 5
+k = 7
 (seeds, labels) = get_data(name, s)
 Z = get_mesh(seeds, k)
 bln = BalloonNominate(0.5)
