@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
 from kde import TwoClassKDE
+from balloon import BalloonNominate
 from scipy.sparse.linalg import minres, bicgstab
 from attr_vn import *
 from copy import deepcopy
@@ -145,6 +146,10 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                 #if pm.verbose:
                 #    print("\nCross-validating to optimize KDE bandwidth...")
                 #timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
+            elif (pm.classifier == 'inflate'):
+                self.clf = BalloonNominate(pm.lamb, deflate = False)
+            elif (pm.classifier == 'deflate'):
+                self.clf = BalloonNominate(pm.lamb, deflate = True)
             else:
                 raise ValueError("Invalid classifier '%s'." % pm.classifier)
 
@@ -217,7 +222,7 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         fs = self.false_seeds[np.random.choice(range(self.num_false_seeds), pm.num_false_samps, replace = False)]
         training = list(ts) + list(fs)
         test = list(self.all_seeds.difference(set(training)))
-        train_out, test_out = self.ind[training], self.ind[test]
+        train_out, test_out = np.asarray(self.ind[training]), np.asarray(self.ind[test])
         df = pd.DataFrame(index = test)
         df['node'] = test_out
 

@@ -22,6 +22,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
+from balloon import BalloonNominate
 from kde import TwoClassKDE
 from attr_vn import *
 
@@ -72,7 +73,7 @@ def main():
     if pm.verbose:
         print("\n%d total seeds (%d positive, %d negative)" % (num_true_seeds + num_false_seeds, num_true_seeds, num_false_seeds))
     train_out = ind[training]
-
+    print(pm.vn_method)
     if (pm.vn_method == 'embedding'):
 
         # stack feature vectors, projecting to sphere if desired
@@ -134,6 +135,10 @@ def main():
             if pm.verbose:
                 print("\nCross-validating to optimize KDE bandwidth...")
             timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
+        elif (pm.classifier == 'inflate'):
+            clf = BalloonNominate(pm.lamb, deflate = False)
+        elif (pm.classifier == 'deflate'):
+            clf = BalloonNominate(pm.lamb, deflate = True)
         else:
             raise ValueError("Invalid classifier '%s'." % pm.classifier)
 
@@ -207,6 +212,7 @@ def main():
         # get all sparse matrices
         if pm.verbose:
             print("\nObtaining sparse matrices...")
+        (A, text_attr_pfas_by_type) = onetime_work
         text_attr_operators_by_type = {attr_type : a.make_uncollapsed_operator(pfa, attr_type, sim = pm.sim, delta = pm.delta, verbose = pm.verbose) for (attr_type, pfa) in text_attr_pfas_by_type.items()}
         sparse_ops = ([A] if pm.use_context else []) + list(text_attr_operators_by_type.values())
         if (pm.vn_method == 'randomwalk'):
