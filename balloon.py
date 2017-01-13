@@ -7,7 +7,7 @@ import unittest
 import pandas as pd
 import logging
 from logging import debug
-logging.basicConfig(level = logging.DEBUG, format = '%(message)s')
+logging.basicConfig(level = logging.CRITICAL, format = '%(message)s')
 
 
 def flatten1(blocks):
@@ -244,27 +244,46 @@ class BalloonNominate():
 
 
 class TestBalloon(unittest.TestCase):
-    def test_correctness1(self):
+    def get_test_data(self, testnum):
         np.random.seed(0)
-        seeds = np.random.randn(20, 50)
-        labels = np.random.randint(0, 2, 20)
-        X = np.random.randn(200, 50)
-        infl = BalloonNominate(0.5, deflate = False)
-        infl.fit(seeds, labels)
-        scores = infl.predict_proba(X)[:, 1]
+        if (testnum == 1):  # small example
+            seeds = np.random.randn(5, 50)
+            labels = np.random.randint(0, 2, 5)
+            X = np.random.randn(10, 50)
+            true_ranked_list = [6, 0, 8, 3, 5, 4, 2, 7, 9, 1]
+        elif (testnum == 2):  # bigger example
+            seeds = np.random.randn(20, 50)
+            labels = np.random.randint(0, 2, 20)
+            X = np.random.randn(200, 50)     
+            true_ranked_list = [92, 151, 94, 172, 15, 118, 82, 154, 52, 84, 137, 27, 196, 192, 26, 39, 116, 173, 189, 139, 185, 104, 11, 70, 66, 7, 132, 133, 6, 165, 9, 169, 58, 119, 55, 144, 63, 153, 179, 152, 65, 38, 73, 97, 64, 95, 180, 199, 156, 162, 174, 109, 21, 134, 43, 13, 44, 188, 120, 79, 25, 187, 2, 103, 18, 77, 69, 16, 121, 122, 195, 30, 35, 181, 68, 145, 45, 1, 186, 47, 170, 59, 57, 83, 88, 85, 76, 48, 62, 67, 175, 127, 125, 81, 53, 112, 0, 107, 75, 191, 71, 105, 113, 86, 12, 102, 111, 80, 160, 49, 22, 42, 50, 143, 147, 128, 166, 61, 108, 135, 193, 41, 184, 161, 89, 177, 74, 114, 115, 3, 99, 93, 194, 14, 163, 5, 198, 131, 130, 37, 159, 164, 124, 168, 8, 126, 110, 51, 176, 29, 10, 96, 171, 32, 54, 190, 33, 183, 19, 106, 148, 46, 149, 72, 155, 23, 60, 100, 178, 28, 182, 56, 20, 90, 40, 24, 150, 87, 138, 141, 98, 91, 197, 78, 101, 146, 142, 36, 167, 123, 129, 140, 136, 34, 4, 117, 17, 158, 31, 157]   
+        elif (testnum == 3):  # some equidistant points
+            seeds = np.array([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype = float)
+            labels = np.array([1, 1, 0, 0])
+            X = np.array([[0, 0], [-2, 0], [2, 0], [0, 2], [0, -2]], dtype = float) 
+            true_ranked_list = [1, 2, 0, 3, 4]
+        elif (testnum == 4):  # points equal seeds
+            seeds = np.random.randn(5, 50)
+            labels = np.random.randint(0, 2, 5)
+            X = np.vstack([seeds[0], np.random.randn(9, 50)])
+            true_ranked_list = [0, 7, 1, 9, 4, 6, 5, 3, 8, 2]
+        elif (testnum == 5):  # points are on a small lattice
+            seeds = np.random.randint(-4, 5, (5, 2))
+            labels = np.random.randint(0, 2, 5)
+            X = np.random.randint(-4, 5, (10, 2))
+            true_ranked_list = [0, 5, 1, 2, 8, 3, 7, 4, 9, 6]
+        return (seeds, labels, X, true_ranked_list)
+    def test_correctness(self, testnum, lamb = 0.5, deflate = False):
+        (seeds, labels, X, true_ranked_list) = self.get_test_data(testnum)
+        bln = BalloonNominate(lamb, deflate = deflate)
+        bln.fit(seeds, labels)
+        scores = bln.predict_proba(X)[:, 1]
         ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]
-        true_ranked_list = [92, 151, 94, 172, 15, 118, 82, 154, 52, 84, 137, 27, 196, 192, 26, 39, 116, 173, 189, 139, 185, 104, 11, 70, 66, 7, 132, 133, 6, 165, 9, 169, 58, 119, 55, 144, 63, 153, 179, 152, 65, 38, 73, 97, 64, 95, 180, 199, 156, 162, 174, 109, 21, 134, 43, 13, 44, 188, 120, 79, 25, 187, 2, 103, 18, 77, 69, 16, 121, 122, 195, 30, 35, 181, 68, 145, 45, 1, 186, 47, 170, 59, 57, 83, 88, 85, 76, 48, 62, 67, 175, 127, 125, 81, 53, 112, 0, 107, 75, 191, 71, 105, 113, 86, 12, 102, 111, 80, 160, 49, 22, 42, 50, 143, 147, 128, 166, 61, 108, 135, 193, 41, 184, 161, 89, 177, 74, 114, 115, 3, 99, 93, 194, 14, 163, 5, 198, 131, 130, 37, 159, 164, 124, 168, 8, 126, 110, 51, 176, 29, 10, 96, 171, 32, 54, 190, 33, 183, 19, 106, 148, 46, 149, 72, 155, 23, 60, 100, 178, 28, 182, 56, 20, 90, 40, 24, 150, 87, 138, 141, 98, 91, 197, 78, 101, 146, 142, 36, 167, 123, 129, 140, 136, 34, 4, 117, 17, 158, 31, 157]
-        self.assertTrue(ranked_list == true_ranked_list)
-    def test_correctness2(self):
-        np.random.seed(0)
-        seeds = np.random.randn(5, 50)
-        labels = np.random.randint(0, 2, 5)
-        X = np.random.randn(10, 50)
-        infl = BalloonNominate(0.5, deflate = False)
-        infl.fit(seeds, labels)
-        scores = infl.predict_proba(X)[:, 1]
-        ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]
+        print("\nComputed ranking:")
         print(ranked_list)
+        print("\nTrue ranking:")
+        print(true_ranked_list)
+        print("\n" + str(ranked_list == true_ranked_list))
+        self.assertTrue(ranked_list == true_ranked_list)
     def test_time(self):
         np.random.seed(0)
         seeds = np.random.randn(100, 50)
@@ -273,7 +292,7 @@ class TestBalloon(unittest.TestCase):
         infl = BalloonNominate(0.5, deflate = False)
         infl.fit(seeds, labels)
         scores = infl.predict_proba(X)[:, 1]
-        ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]        
+        ranked_list = [pair[0] for pair in sorted(enumerate(scores), key = lambda pair : pair[1], reverse = True)]                
 
 
 

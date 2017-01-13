@@ -2,7 +2,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from kde import TwoClassKDE
-#from balloon import BalloonNominate
 import balloon
 import numpy as np
 import matplotlib.pyplot as plt

@@ -29,6 +29,9 @@ def main():
     optparser.add_option('-H', '--hours',
         action='store', dest='hours', type='int', default=24,
         help="hours of grid time")
+    optparser.add_option('-w', '--wait',
+        action='store', dest='wait', type='int', default=10,
+        help="wait time between launches (seconds)")
     optparser.add_option('-e', '--experiment',
         action='append', dest='experiments', type='string', default=None,
         help="run only selected experiments, by default run all experiments in config file.")
@@ -69,7 +72,7 @@ def main():
                     f.write('\n')
 
     os.chdir('..')
-    script = "#!/usr/bin/env python3\nimport os\ntask_id = int(os.environ['SGE_TASK_ID'])\ni = task_id - 1\nos.system('sleep %d' % (15 * i))\nos.system('python3 -u test.py " + sys.argv[1] + " -n 1 -c tmp/experiments%d.cfg' % i)\n"
+    script = "#!/usr/bin/env python3\nimport os\ntask_id = int(os.environ['SGE_TASK_ID'])\ni = task_id - 1\nos.system('sleep %d' % (" + str(opts.wait) + "* i))\nos.system('python3 -u test.py " + sys.argv[1] + " -n 1 -c tmp/experiments%d.cfg' % i)\n"
     filename = "%s/tmp/script.py" % sys.argv[1]
     open(filename, 'w').write(script)
     os.chmod(filename, 0o770)
