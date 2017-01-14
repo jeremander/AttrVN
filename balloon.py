@@ -7,6 +7,7 @@ import unittest
 import pandas as pd
 import logging
 import time
+from heap import *
 from logging import debug
 logging.basicConfig(level = logging.CRITICAL, format = '%(message)s')
 
@@ -16,7 +17,6 @@ def block_sort(items, key, reverse):
     for item in items:
         d[key(item)].append(item)
     return [d[k] for k in sorted(d.keys(), reverse = reverse)]
-
 
 class RankHierarchicalClustering():
     """Class representing a set of indices associated with scores, clustered by equal score. When scores change, clusters are broken hierarchically (i.e. an index can change ranking with respect to its other cluster members, but not with respect to nonmembers. Breaking clusters ranks the new subclusters by decreasing score."""
@@ -246,16 +246,16 @@ class BalloonNominate():
                 break
         assert(best_set_size == len(best_indices))
         return (best_dist, intersection_sizes, best_indices)
-    def predict_proba(self, X):
+    def predict_proba2(self, X):
         """Given n x m matrix X, returns rank-derived scores for the n data points, using either the inflation or deflation method."""
         (sorted_dists, sorted_dists_by_row, dist_dict) = self.get_row_sorted_dists(X)  # get distances by node
         if self.deflate:  # use descending order of distances if doing deflation
             sorted_dists = np.flipud(sorted_dists)
             sorted_dists_by_row = np.fliplr(sorted_dists_by_row)
         n = len(X)
-        debug(dist_dict)
-        debug(sorted_dists)
-        debug(sorted_dists_by_row)
+        #debug(dist_dict)
+        #debug(sorted_dists)
+        #debug(sorted_dists_by_row)
         min_dist, max_dist = sorted_dists[0], sorted_dists[-1]
         score0 = (self.lamb * self.s_plus - (1 - self.lamb) * self.s_minus) if self.deflate else 0.0
         rhc = RankHierarchicalClustering(n, score0)
@@ -267,14 +267,14 @@ class BalloonNominate():
             if np.isinf(next_dist):  # +/-inf signifies no more nodes will change
                 break
             rows_with_next_dist = set(np.nonzero((next_dist_by_row == next_dist) & (~rhc.is_single))[0])
-            debug("\nnonsingletons: %s" % str([i for i in range(n) if ~rhc.is_single[i]]))
-            debug("cluster_by_row: %s" % str(rhc.clusters_by_index))
-            debug("cluster sizes: %s" % str(rhc.cluster_sizes))
-            debug("cluster starts: %s" % str(rhc.cluster_starts))
-            debug("ind_by_row: %s" % str(ind_by_row))
-            debug("next_dist_by_row: %s" % str(next_dist_by_row))
-            debug("next_dist = %f" % next_dist)
-            debug("rows: %s" % str(rows_with_next_dist))
+            #debug("\nnonsingletons: %s" % str([i for i in range(n) if ~rhc.is_single[i]]))
+            #debug("cluster_by_row: %s" % str(rhc.clusters_by_index))
+            #debug("cluster sizes: %s" % str(rhc.cluster_sizes))
+            #debug("cluster starts: %s" % str(rhc.cluster_starts))
+            #debug("ind_by_row: %s" % str(ind_by_row))
+            #debug("next_dist_by_row: %s" % str(next_dist_by_row))
+            #debug("next_dist = %f" % next_dist)
+            #debug("rows: %s" % str(rows_with_next_dist))
             indices = list(rows_with_next_dist)
             new_scores = []
             for i in indices:
@@ -282,9 +282,9 @@ class BalloonNominate():
                 new_score = (rhc.scores[i] - diff) if self.deflate else (rhc.scores[i] + diff)
                 new_scores.append(new_score)
             new_singletons = rhc.change_scores(indices, new_scores)
-            debug(rhc)
-            debug("is_single: %s" % str(rhc.is_single))
-            debug("new singletons: %s" % str(new_singletons))
+            #debug(rhc)
+            #debug("is_single: %s" % str(rhc.is_single))
+            #debug("new singletons: %s" % str(new_singletons))
             for i in new_singletons:
                 next_dist_by_row[i] = done_marker
             for i in indices:
@@ -294,6 +294,61 @@ class BalloonNominate():
                         ind += 1
                     ind_by_row[i] = ind  # increment node's index in sorted dist array until it's a new distance
                     next_dist_by_row[i] = sorted_dists_by_row[i, ind] if (ind < self.s) else done_marker
+        scores = np.zeros((n, 2))
+        cluster_ranks = [pair[0] for pair in sorted(enumerate(rhc.cluster_starts), key = lambda pair : pair[1])]
+        ranks_by_cluster = {k : j for (j, k) in enumerate(cluster_ranks)}
+        for i in range(n):
+            scores[i, 0] = ranks_by_cluster[rhc.clusters_by_index[i]] / (rhc.num_clusters - 1.0)
+        scores[:, 1] = 1.0 - scores[:, 0]
+        return scores
+    def predict_proba(self, X):
+        """Given n x m matrix X, returns rank-derived scores for the n data points, using either the inflation or deflation method."""
+        (sorted_dists, sorted_dists_by_row, dist_dict) = self.get_row_sorted_dists(X)  # get distances by node
+        if self.deflate:  # use descending order of distances if doing deflation
+            sorted_dists = np.flipud(sorted_dists)
+            sorted_dists_by_row = np.fliplr(sorted_dists_by_row)
+        n = len(X)
+        #debug(dist_dict)
+        #debug(sorted_dists)
+        #debug(sorted_dists_by_row)
+        min_dist, max_dist = sorted_dists[0], sorted_dists[-1]
+        score0 = (self.lamb * self.s_plus - (1 - self.lamb) * self.s_minus) if self.deflate else 0.0
+        rhc = RankHierarchicalClustering(n, score0)
+        ind_by_row = np.zeros(n, dtype = int)   # index of current dist in sorted_dists_by_row
+        next_dist_heap = BinaryHeap.build([KeyValuePair(*pair) for pair in enumerate(sorted_dists_by_row[:, 0])], increasing = (not self.deflate))
+        while (next_dist_heap.current_size > 0):
+            #debug("next_dist_heap: %s" % str(next_dist_heap))
+            next_dist = next_dist_heap.min()[1]
+            indices = []
+            while ((next_dist_heap.current_size > 0) and (next_dist_heap.min()[1] == next_dist)):
+                i = next_dist_heap.delete_min()[0]
+                if (not rhc.is_single[i]):
+                    indices.append(i)
+            #debug("\nnonsingletons: %s" % str([i for i in range(n) if ~rhc.is_single[i]]))
+            #debug("cluster_by_row: %s" % str(rhc.clusters_by_index))
+            #debug("cluster sizes: %s" % str(rhc.cluster_sizes))
+            #debug("cluster starts: %s" % str(rhc.cluster_starts))
+            #debug("ind_by_row: %s" % str(ind_by_row))
+            #debug("next_dist = %f" % next_dist)
+            #debug("indices = %s" % str(indices))
+            #debug("next_dist_heap: %s" % str(next_dist_heap))
+            new_scores = []
+            for i in indices:
+                diff = self.lamb * dist_dict[next_dist][i][0] - (1 - self.lamb) * dist_dict[next_dist][i][1]
+                new_score = (rhc.scores[i] - diff) if self.deflate else (rhc.scores[i] + diff)
+                new_scores.append(new_score)
+            new_singletons = rhc.change_scores(indices, new_scores)
+            #debug(rhc)
+            #debug("is_single: %s" % str(rhc.is_single))
+            #debug("new singletons: %s" % str(new_singletons))
+            for i in indices:
+                if (not rhc.is_single[i]):
+                    ind = ind_by_row[i] + 1
+                    while ((ind < self.s) and (sorted_dists_by_row[i, ind] == next_dist)):
+                        ind += 1
+                    ind_by_row[i] = ind  # increment node's index in sorted dist array until it's a new distance
+                    if (ind < self.s):
+                        next_dist_heap.insert(KeyValuePair(i, sorted_dists_by_row[i, ind]))
         scores = np.zeros((n, 2))
         cluster_ranks = [pair[0] for pair in sorted(enumerate(rhc.cluster_starts), key = lambda pair : pair[1])]
         ranks_by_cluster = {k : j for (j, k) in enumerate(cluster_ranks)}
