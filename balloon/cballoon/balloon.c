@@ -171,13 +171,13 @@ int compare_point(void *arg, const void *a, const void *b) {
     long i2 = *((const long *) b);
     compare_point_info *info = (compare_point_info *) arg;
     long j1 = -1, j2 = -1;
-    long next_j1, next_j2;
+    long next_j1 = -1, next_j2 = -1;
     double cumsum1 = 0.0, cumsum2 = 0.0;
     double dij1, dij2;
 #if (VERBOSITY >= 2)
     printf("\ni1 = %ld, i2 = %ld\n", i1, i2);
 #endif
-    while (MIN(j1, j2) < info->s_minus_one) {
+    while (MIN(next_j1, next_j2) < info->s_minus_one) {
         next_j1 = MIN(info->s_minus_one, j1 + 1);
         next_j2 = MIN(info->s_minus_one, j2 + 1);
         dij1 = info->D_tilde->arr[i1][next_j1];
@@ -186,16 +186,31 @@ int compare_point(void *arg, const void *a, const void *b) {
         printf("j1 = %ld, j2 = %ld\n", j1, j2);
         printf("next_j1 = %ld, next_j2 = %ld\n", next_j1, next_j2);
         printf("dij1 = %f, dij2 = %f\n", dij1, dij2);
+        if (dij1 > dij2) {
+            printf("dij1 > dij2\n");
+        }
+        else if (dij1 < dij2) {
+            printf("dij1 < dij2\n");
+        }
+        else {
+            printf("dij1 == dij2\n");
+        }
 #endif
         if ((info->deflate && (dij1 >= dij2)) || (!info->deflate && (dij1 <= dij2))) {
             while ((next_j1 > j1) || ((j1 < info->s_minus_one) && info->G_tilde->arr[i1][j1])) {
                 ++j1;
+#if (VERBOSITY >= 2)
+                printf("\tlabel1 = %f\n", info->labels[info->I_tilde->arr[i1][j1]]);
+#endif
                 cumsum1 += info->labels[info->I_tilde->arr[i1][j1]];
             }
         }
         if ((info->deflate && (dij1 <= dij2)) || (!info->deflate && (dij1 >= dij2))) {
             while ((next_j2 > j2) || ((j2 < info->s_minus_one) && info->G_tilde->arr[i2][j2])) {
                 ++j2;
+#if (VERBOSITY >= 2)
+                printf("\tlabel2 = %f\n", info->labels[info->I_tilde->arr[i2][j2]]);
+#endif
                 cumsum2 += info->labels[info->I_tilde->arr[i2][j2]];
 
             }

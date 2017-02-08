@@ -99,8 +99,11 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         self.pm.__dict__.update(params)  # overwrite default params with test parameters
         pm = self.pm
         if (pm.verbosity >= 1):
-            print("\n\n#################################################\nStarting experiment %d of %d with params...\n" % (params['***EXP_NUM***'] + 1, self.num_experiments_))
+            print("\n\n#################################################\nStarting experiment %d of %d with params...\n" % (params['***EXP_NUM***'], self.num_experiments_))
             print_params(params)
+        #print(params)
+        #print()
+        #print(self.pm.__dict__)
 
         # read nomination attributes & their types from a file
         nomination_attr_type = self.nom_attr_df['attributeType'][pm.nom_ind]

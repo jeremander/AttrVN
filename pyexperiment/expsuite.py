@@ -534,7 +534,7 @@ class PyExperimentSuite(object):
         
         # read main configuration file
         paramlist = []
-        for exp in self.cfgparser.sections():
+        for (i, exp) in enumerate(self.cfgparser.sections()):
             if not self.options.experiments or exp in self.options.experiments:
                 params = self.items_to_params(self.cfgparser.items(exp))
                 params['name'] = exp
@@ -565,6 +565,10 @@ class PyExperimentSuite(object):
         # expand paramlist for all repetitions and add self and rep number
         for p in paramlist:
             explist.extend(zip( [self]*p['repetitions'], [p]*p['repetitions'], range(p['repetitions']) ))
+
+        self.num_experiments_ = len(explist)
+        for (i, e) in enumerate(explist):
+            e[1]['***EXP_NUM***'] = i + 1
                 
         # if only 1 process is required call each experiment seperately (no worker pool)
         if self.options.ncores == 1:

@@ -135,11 +135,16 @@ libbln_filename = "balloon/cballoon/balloon.so"
 def arr2D_to_ptr(arr):
     return (arr.__array_interface__['data'][0]  + np.arange(arr.shape[0]) * arr.strides[0]).astype(np.uintp)
 
+libbln = CDLL(libbln_filename)
+_longp = np.ctypeslib.ndpointer(dtype = int, ndim = 1)
+_doublep = np.ctypeslib.ndpointer(dtype = float, ndim = 1)
+_doublepp = np.ctypeslib.ndpointer(dtype = np.uintp, ndim = 1, flags = 'C') 
+libbln.py_compute_squared_distances.argtypes = [c_long, c_long, c_long, _doublepp, _doublepp, _doublepp, c_int]
+libbln.py_balloon_rank_from_distances.argtypes = [c_long, c_long, _doublepp, _doublep, _longp, c_bool, c_int]
+libbln.py_balloon_rank.argtypes = [c_long, c_long, c_long, _doublepp, _doublepp, _doublep, _longp, c_bool, c_int]
+
 def compute_squared_distances(points, seeds, num_threads = -1):
     """Given n x d matrix of points and s x d matrix of seeds, computes the n x s matrix of squared distances between the points and the seeds. Uses a shared C library for efficiency. If num_threads == -1, uses the max number of threads."""
-    libbln = CDLL(libbln_filename)
-    _doublepp = np.ctypeslib.ndpointer(dtype = np.uintp, ndim = 1, flags = 'C') 
-    libbln.py_compute_squared_distances.argtypes = [c_long, c_long, c_long, _doublepp, _doublepp, _doublepp, c_int]
     (n, dim) = points.shape
     (s, dim2) = seeds.shape
     assert (dim == dim2)
@@ -151,11 +156,6 @@ def compute_squared_distances(points, seeds, num_threads = -1):
 
 def balloon_rank_from_distances(D, labels, deflate = False, num_threads = -1):
     """Given n x s matrix of distances, and real labels (+ for pos. seed, - for neg. seed, possible weighting), computes the inflation or deflation ranking of the points. Uses a shared C library for efficiency."""
-    libbln = CDLL(libbln_filename)
-    _longp = np.ctypeslib.ndpointer(dtype = int, ndim = 1)
-    _doublep = np.ctypeslib.ndpointer(dtype = float, ndim = 1)
-    _doublepp = np.ctypeslib.ndpointer(dtype = np.uintp, ndim = 1, flags = 'C') 
-    libbln.py_balloon_rank_from_distances.argtypes = [c_long, c_long, _doublepp, _doublep, _longp, c_bool, c_int]
     (n, s) = D.shape
     assert (labels.shape == (s,))
     D = np.asarray(D, dtype = float)
@@ -166,11 +166,6 @@ def balloon_rank_from_distances(D, labels, deflate = False, num_threads = -1):
 
 def balloon_rank(points, seeds, labels, deflate = False, num_threads = -1):
     """Given n x d matrix of points and s x d matrix of seeds, computes the pairwise distance matrix between points and seeds, then computes the inflation or deflation ranking of the points using a shared C library for efficiency."""
-    libbln = CDLL(libbln_filename)
-    _longp = np.ctypeslib.ndpointer(dtype = int, ndim = 1)
-    _doublep = np.ctypeslib.ndpointer(dtype = float, ndim = 1)
-    _doublepp = np.ctypeslib.ndpointer(dtype = np.uintp, ndim = 1, flags = 'C') 
-    libbln.py_balloon_rank.argtypes = [c_long, c_long, c_long, _doublepp, _doublepp, _doublep, _longp, c_bool, c_int]
     (n, dim) = points.shape
     (s, dim2) = seeds.shape
     assert (dim == dim2)
