@@ -37,13 +37,13 @@ void test_time(long nseeds, long npoints, long dim, long seed) {
     printf("%g seconds.\n\n", times[1] - times[0]);
     printf("Computing seed/point distances...\n");
     float_matrix *D = get_float_matrix(npoints, nseeds);
-    compute_squared_distances(points, seeds, D);
+    compute_squared_distances(points, seeds, D, omp_get_max_threads());
     clock_gettime(clockid, &ts);
     times[2] = ts.tv_sec + ts.tv_nsec / 1e9;
     printf("%g seconds.\n\n", times[2] - times[1]);
     printf("Computing inflation ranking...\n");
     long *ranks = calloc(npoints, sizeof(long));
-    balloon_rank_from_distances(D, labels, ranks, false);
+    balloon_rank_from_distances(D, labels, ranks, false, omp_get_max_threads());
     clock_gettime(clockid, &ts);
     times[3] = ts.tv_sec + ts.tv_nsec / 1e9;
     printf("%g seconds.\n\n", times[3] - times[2]);

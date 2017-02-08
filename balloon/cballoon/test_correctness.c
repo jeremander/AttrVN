@@ -122,7 +122,7 @@ bool test_correctness(long testnum) {
     }
 
     D = get_float_matrix(points->nrows, seeds->nrows);
-    compute_squared_distances(points, seeds, D);
+    compute_squared_distances(points, seeds, D, omp_get_max_threads());
     printf("points\n");
     disp_float_matrix(points);
     printf("seeds\n");
@@ -131,7 +131,7 @@ bool test_correctness(long testnum) {
     disp_float_matrix(D);
 
     long *ranking = calloc(points->nrows, sizeof(long));
-    balloon_rank_from_distances(D, labels, ranking, false);
+    balloon_rank_from_distances(D, labels, ranking, false, omp_get_max_threads());
     bool result = true;
     printf("computed ranking:\n");
     for(i = 0; i < points->nrows; ++i) {

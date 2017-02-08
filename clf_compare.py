@@ -56,8 +56,8 @@ def get_color(x):
 
 test_name = 'balloon'
 #predictor_names = ['logreg', 'gnb', 'randfor', 'kde1.0', 'infl0.5', 'defl0.5']
-#predictor_names = ['infl0.0', 'infl0.5', 'infl1.0', 'defl0.0', 'defl0.5', 'defl1.0']
-predictor_names = ['infl0.1', 'infl0.5', 'infl0.9', 'defl0.1', 'defl0.5', 'defl0.9']
+predictor_names = ['infl0.0', 'infl0.5', 'infl1.0', 'defl0.0', 'defl0.5', 'defl1.0']
+#predictor_names = ['infl0.1', 'infl0.5', 'infl0.9', 'defl0.1', 'defl0.5', 'defl0.9']
 #predictor_names = ['kde0.001', 'kde0.01', 'kde0.1', 'kde1.0', 'kde10.0', 'kde100.0']
 num_preds = len(predictor_names)
 
