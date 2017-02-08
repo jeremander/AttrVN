@@ -44,7 +44,7 @@ def main():
             vars_by_type['constant'].add(var)
 
     if (experiment == 'embedding'):
-        vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'classifier'}
+        vars_by_distinguisher = {'xfacet' : 'use_pca', 'yfacet' : 'info', 'color' : 'classifier'}
         vars_for_title = ['info', 'classifier', 'use_pca', 'sphere_context', 'sphere_content']
     elif (experiment == 'randomwalk'):
         vars_by_distinguisher = {'xfacet' : 'info', 'yfacet' : 'randomwalk_score_style', 'color' : 'randomwalk_steps', 'linestyle' : 'score_fusion_style'}
@@ -55,6 +55,9 @@ def main():
     elif (experiment == 'compare'):
         vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'vn_method'}
         vars_for_title = ['classifier', 'score_fusion_style']
+    elif (experiment == 'balloon'):
+        vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'classifier', 'xfacet' : 'lamb'}
+        vars_for_title = ['info', 'classifier', 'use_pca', 'sphere_context', 'sphere_content']
 
     vars_for_title = [var for var in vars_for_title if (var in params)]
     vars_to_suppress_in_legend = ['info', 'classifier']  # show values but not variable names
@@ -146,7 +149,6 @@ def main():
                             print()
                             plot_fail = True
                             break
-                            #continue
                         plot, = ax.plot(np.arange(num_test), mean_prec, color = colors[i], linestyle = linestyles[j], linewidth = 2)
                         plot.set_dash_capstyle('projecting')
                         if (('linestyle' in vars_by_distinguisher) or ('color' in vars_by_distinguisher)):
@@ -184,7 +186,6 @@ def main():
 
         if plot_fail:
             continue
-
         for row in axis_grid:
             for ax in row:
                 ax.set_xlim((0, max_num_test - 1))

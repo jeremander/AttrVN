@@ -54,9 +54,10 @@ def rank_scale(img):
 def get_color(x):
     return x * np.array([1., 0., 0.]) + (1 - x) * np.array([0., 0., 1.])
 
-
+test_name = 'balloon'
 #predictor_names = ['logreg', 'gnb', 'randfor', 'kde1.0', 'infl0.5', 'defl0.5']
-predictor_names = ['infl0.0', 'infl0.5', 'infl1.0', 'defl0.0', 'defl0.5', 'defl1.0']
+#predictor_names = ['infl0.0', 'infl0.5', 'infl1.0', 'defl0.0', 'defl0.5', 'defl1.0']
+predictor_names = ['infl0.1', 'infl0.5', 'infl0.9', 'defl0.1', 'defl0.5', 'defl0.9']
 #predictor_names = ['kde0.001', 'kde0.01', 'kde0.1', 'kde1.0', 'kde10.0', 'kde100.0']
 num_preds = len(predictor_names)
 
@@ -149,10 +150,10 @@ def main():
         ax.set_title(name)
     plotnames = set(os.listdir('benchmark/plots'))
     ctr = 0
-    path = '%s_compare_g%s_%d_%d.png' % (opts.dataset, str(opts.g), seed, ctr)
+    path = '%s_%s_g%s_%d_%d.png' % (opts.dataset, test_name, str(opts.g), seed, ctr)
     while (path in plotnames):
         ctr += 1
-        path = '%s_compare_g%s_%d_%d.png' % (opts.dataset, str(opts.g), seed, ctr)
+        path = '%s_%s_g%s_%d_%d.png' % (opts.dataset, test_name, str(opts.g), seed, ctr)
     plt.savefig('benchmark/plots/%s' % path)
     #plt.show()
 

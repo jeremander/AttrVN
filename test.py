@@ -45,7 +45,8 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         for var in dir(param_module):  # builtin vars pollute the namespace; filter them out
             if (not var.startswith('__')):
                 pm.__dict__[var] = param_module.__dict__[var]
-        pm.verbosity = 1 if pm.verbose else 0
+        pm.verbose = pm.verbosity > 0
+        #pm.verbosity = 1 if pm.verbose else 0
 
         # partition attribute types into text/discrete (str dtype) or numeric
         self.text_attr_types, self.num_attr_types = [], []

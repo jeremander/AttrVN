@@ -45,7 +45,7 @@ def convert_param_to_dirname(param):
     """ Helper function to convert a parameter value to a valid directory name. """
     if isinstance(param, str):
         return param
-    elif isinstance(param, int):
+    elif isinstance(param, (int, float)):
         return str(param)
     else:
         return re.sub("0+$", '0', '%f'%param)
@@ -70,7 +70,6 @@ class PyExperimentSuite(object):
     restore_supported = False
     
     def __init__(self):
-
         self.parse_opt()
         self.parse_cfg()
         
@@ -541,15 +540,15 @@ class PyExperimentSuite(object):
                 params['name'] = exp
                 paramlist.append(params)
 
-        paramlist = self.expand_param_list(paramlist)
         self.do_experiment(paramlist)
                 
     
-    def do_experiment(self, paramlist):
+    def do_experiment(self, params):
         """ runs one experiment programatically and returns.
             params: either parameter dictionary (for one single experiment) or a list of parameter
             dictionaries (for several experiments).
         """
+        paramlist = self.expand_param_list(params)
         
         # create directories, write config files
         for pl in paramlist:
@@ -564,11 +563,8 @@ class PyExperimentSuite(object):
         explist = []
             
         # expand paramlist for all repetitions and add self and rep number
-        for (i, p) in enumerate(paramlist):  # track number of the experiment
-            p['***EXP_NUM***'] = i
+        for p in paramlist:
             explist.extend(zip( [self]*p['repetitions'], [p]*p['repetitions'], range(p['repetitions']) ))
-
-        self.num_experiments_ = len(explist)
                 
         # if only 1 process is required call each experiment seperately (no worker pool)
         if self.options.ncores == 1:
@@ -579,8 +575,9 @@ class PyExperimentSuite(object):
             pool = Pool(processes=self.options.ncores)
             pool.map(mp_runrep, explist)
         
-        return True    
-   
+        return True        
+        
+       
     def run_rep(self, params, rep):
         """ run a single repetition including directory creation, log files, etc. """
         name = params['name']

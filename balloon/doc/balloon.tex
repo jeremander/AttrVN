@@ -1,0 +1,269 @@
+\documentclass[11pt, oneside, fleqn, UTF8]{article} 	% use "amsart" instead of "article" for AMSLaTeX format
+\usepackage{geometry}                		% See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper, margin=1.1in}  
+%\geometry{landscape}                		% Activate for for rotated page geometry
+\usepackage[parfill]{parskip}    		% Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}				% Use pdf, png, jpg, or eps§ with pdflatex; use eps in DVI mode
+								% TeX will automatically convert eps --> pdf in pdflatex		
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage{mathtools}
+\usepackage{caption}
+\usepackage[skip=-12pt]{subcaption}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+}
+
+\usepackage[space]{grffile}
+\usepackage{color}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{listings}
+
+\theoremstyle{definition}
+\newtheorem{defn}{Definition}
+\newtheorem{theorem}{Theorem} 
+\newtheorem{lemma}{Lemma} 
+
+\newcommand{\given}{\; | \;}
+\newcommand{\st}{\; \text{s.t.} \;}
+\newcommand{\reals}{\mathbb{R}}
+\renewcommand{\arraystretch}{1.5}
+
+\newcommand{\union}{\cup}
+\renewcommand{\th}[1]{$#1^{\textrm{th}}$}
+\newcommand{\td}[0]{\tilde{d}}
+\newcommand{\tr}[0]{\tilde{r}}
+\newcommand{\tk}[0]{\tilde{k}}
+\newcommand{\tM}[0]{\tilde{M}}
+\newcommand{\tm}[0]{\tilde{m}}
+
+\newcommand{\rmP}[0]{\mathrm{P}}
+\newcommand{\rmK}[0]{\mathrm{K}}
+\newcommand{\rmS}[0]{\mathrm{S}}
+\newcommand{\tI}[0]{\tilde{I}}
+\newcommand{\ti}[0]{\tilde{i}}
+\newcommand{\tj}[0]{\tilde{j}}
+
+\newcommand{\Rd}{\mathbb{R}^d}
+
+\usepackage[]{listings}
+\DeclareFixedFont{\ttb}{T1}{txtt}{bx}{n}{9} % for bold
+\DeclareFixedFont{\ttm}{T1}{txtt}{m}{n}{9}  % for normal
+% Defining colors
+\usepackage{color}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+
+\newcommand\pythonstyle{\lstset{
+    language=Python,
+    backgroundcolor=\color{white}
+    basicstyle=\ttm,
+    otherkeywords={self},
+    keywordstyle=\ttb\color{deepblue},
+    emph={MyClass,__init__},
+    emphstyle=\ttb\color{deepred},
+    stringstyle=\color{deepgreen},
+    commentstyle=\color{red},
+    frame=tb,
+    showstringspaces=false
+  }}
+
+% Python environment
+\lstnewenvironment{python}[1][]
+{
+  \pythonstyle
+  \lstset{#1}
+}
+{}
+
+\title{\Huge Balloon Ranking Notes}
+\author{Pushpendre Rastogi \\ Jeremy Silver \\ Johns Hopkins HLTCOE}
+%\date{Dec.\ 10, 2015}						% Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+\section{Definitions and Computation}
+Suppose we have some points in $\mathbb{R}^d$, some of which are ``seeds'' known to have some property of interest, and we wish to rank some other points based on their likelihood of having this property.  A reasonable assumption to make is that points that are close to seeds should be ranked higher than points that are farther away.  
+
+Let $\mathcal{P} \subseteq \Rd$ be the set of all points to be ranked, and let $\rmP$ be its cardinality.
+Let $\mathcal{S} \subseteq \Rd$ be the set of all seeds, and let $\rmS$ be its cardinality.
+Using $i$ to index the points and $j$ to index the seeds, let $d_{ij}$ be the distance of point $p_i$ from
+seed $s_j$.
+
+Let $\tr$ be the length-$\rmK$ sequence of unique $d_{ij}$ values.
+We assume that $\tr$
+is sorted in ascending order, i.e.\ $\tr_1 < \tr_2 < \ldots < \tr_{\rmK}$.\footnote{$\tr$ does not contain duplicates; thus it can be sorted into a strictly increasing sequence.}
+Define $c_{ik}$ to be the number of seeds $s_j$ such that $d_{ij} \le r_k$.
+Let $D \in \mathbb{R}^{\rmP \times \rmS}$ and
+$C \in \mathbb{N}^{\rmP \times \rmK}$ be matrices containing
+$d_{ij}$ and $c_{ik}$ respectively.
+\newline
+\begin{defn}
+Let $\tr_0 = 0 < \tr_1 < \tr_2 < \ldots < \tr_K < \tr_{K+1} = \infty$.  Then we define the \textbf{inflation ranking} $>$  by:
+$$ p_i > p_{i'} \quad \text{iff} \quad \exists k \; \text{such that} \; c_{ik} > c_{i'k} \; \; \text{and} \; \; \forall k' < k, \, c_{ik'} = c_{i'k'}. $$
+\end{defn}
+
+\begin{theorem} \label{inflationStrictOrdering}
+The inflation ranking is a strict weak ordering.
+\end{theorem}
+\begin{proof}
+\hfill
+\begin{itemize}
+\item \textbf{Irreflexivity.} $p_i > p_{i}$ implies $c_{ik} > c_{ik}$ for some $k$, which is impossible.
+\item \textbf{Asymmetry.} $p_i > p_{i'}$ implies $c_{ik} > c_{i'k}$ for some $k$, while (without loss of generality) $p_i < p_{i'}$ implies $c_{ik'} \leq c_{i'k'}$ for all $k' \leq k$. These two statements are contradictory.
+\item \textbf{Transitivity}.  Suppose $p_{\ell} > p_m$ and $p_m > p_n$.  Then
+\begin{align*}
+& 1) \; \exists k_1 \st c_{\ell k_1} > c_{m k_1} \; \; \text{and} \; \; \forall k < k_1, \, c_{\ell k} = c_{mk}, \\
+& 2) \; \exists k_2 \st c_{m k_2} > c_{n k_2} \; \; \text{and} \; \; \forall k < k_2, \, c_{mk} = c_{nk}.
+\end{align*}
+If $k_2 > k_1$, then $c_{\ell k_1} > c_{m k_1}$ by (1), and $c_{m k_1} = c_{n k_1}$ by (2), so $c_{\ell k_1} > c_{n k_1}$.  And for all $k < k_1$, we have $c_{\ell k_1} = c_{m k_1}$ by (1), and $c_{m k_1} = c_{n k_1}$ by (2), so the result holds.
+
+If $k_2 = k_1$, the result follows immediately from the conjunction of both statements in (1) and (2), along with transitivity of inequality.
+
+If $k_2 < k_1$, then $c_{\ell k_2} = c_{m k_2}$ by (1), and $c_{m k_2} > c_{n k_2}$ by (2), so $c_{\ell k_2} > c_{n k_2}$.  And for all $k < k_2$, we have $c_{\ell k_2} = c_{m k_2}$ by (1), and $c_{m k_2} = c_{n k_2}$ by (2), so the result holds.
+\item \textbf{Transitivity of incomparability.}  Suppose neither $p_{\ell} > p_m$ nor $p_{\ell} < p_m$, and neither $p_m > p_n$ nor $p_m < p_n$ hold.  It follows that for all $k$, $c_{\ell k} = c_{mk} = c_{nk}$, and the transitivity of equality yields incomparability of $p_{\ell}$ and $p_n$.
+\end{itemize}
+\end{proof}
+\hfill
+\begin{defn}
+Let $\tr_0 = 0 < \tr_1 < \tr_2 < \ldots < \tr_K < \tr_{K+1} = \infty$.  Then we define the \textbf{deflation ranking} $>$  by:
+$$ p_j > p_{j'} \quad \text{iff} \quad \exists k \; \text{such that} \; c_{jk} > c_{j'k} \; \; \text{and} \; \; \forall k' > k, \, c_{jk'} = c_{j'k'}. $$
+\end{defn}
+\begin{theorem}
+The deflation ranking is a strict ordering.
+\end{theorem}
+\begin{proof}
+Analogous to Theorem \ref{inflationStrictOrdering}.
+\end{proof}
+Collectively we assign to these inflation and deflation rankings the term ``balloon ranking.''
+
+\subsection{Computation of Balloon Ranking}
+\paragraph{Naive Method:}
+To compute a balloon ranking, it suffices to compute the matrix $C$ and then apply the definition of the ranking directly.  
+The following is a na\"ive method for computing $C$:
+\begin{python}
+  for k, r_k in enumerate(r_tilde):
+      C[:, k] = (D > r_k).sum(axis=1)
+\end{python}
+That is, for each unique radius $\tr_k$, we count the total number of seeds within the $\tr_k$-ball of each point.  The overall complexity of this method is $O(\rmK\rmS\rmP)$ operations.  Since $\rmK$ can be equal to $\mathrm{SP}$, this method is impractical.
+
+\paragraph{Fast Computation:}
+Let $m_{ij}$ be the index such that $\tr_{m_{ij}} < d_{ij} \leq \tr_{m_{ij} + 1}$.
+By construction, seed $j$ will contribute a value of 1 to $c_{ik}$ for all
+$\tr_k \ge \tr_{m_{ij}}$, i.e. $c_{ik}  = \sum_{j \in \{1, \ldots, \rmS\}} \mathbb{I}[m_{ij} \le k]$. Clearly, when $k=\rmK$ then $c_{ik} = \rmS$.
+
+Define $M \in \mathbb{N}^{\rmP \times \rmS}$ to be the matrix that contains
+$m_{ij}$. This matrix can be computed in time $O(\rmS\rmP\log(\rmK))$, which is efficient even if $\rmK = \rmS \rmP$. After computing $M$, we can sort each
+row of $M$ in the ascending order using $O(\rmP\rmS\log(\rmS))$
+operations to create the matrix $\tM$.
+$\tM$ is a compressed version of $C$. For example, if $k < \tm_{i1}$
+then $c_{ik}$ equals $0$, and if $k \ge \tm_{i\rmS}$ then $c_{ik}$ equals
+$\rmS$. Finally, if $\tm_{ij} \le k < \tm_{i (j+1)}$ then $c_{ik} = j$; therefore
+$c_{ik}$ can be computed using a binary search on the rows of $\tM$.
+
+The inflation ranking uses the following decision function:
+$p_{i} > p_{i'}$ if there exists $k$ such that $c_{ik} > c_{i'k}$ and
+$c_{ik'} = c_{i'k'}\ \forall k' < k$. Assuming access to $\tM$, this
+decision function can be computed efficiently by comparing the prefixes of
+the sequences $\tm_{i:}$ and $\tm_{i':}$ and by finding the first prefix where
+the two sequences differ. Let $j$ be the first index such
+that $\tm_{ij} \ne \tm_{i'j}$. If $\tm_{ij} > \tm_{i'j}$, then $p_{i} < p_{i'}$;
+otherwise $p_i > p_{i'}$.
+
+\subsection{Binary Labeled Seeds}
+We now consider the case where our seed points contain binary labels. That is, some seeds are ``positive'' examples and others are ``negative'' examples, and we wish to consider both nearness to positive seeds and distance from negative seeds when computing our ranking.  The definitions of inflation and deflation only make use of the distances, $d_{ij}$, and the scores at each distance, $c_{ik}$; they are agnostic to how the $c_{ik}$ are computed, so we are free to modify this in order to accommodate binary labels.
+
+Let $\mathcal{J}^+$ and $\mathcal{J}^-$ be the partition of $\{1, \, 2\, \ldots, \, \rmS\}$ into sets of indices corresponding to the positive and negative seeds, respectively. Let $\lambda \in [0, \, 1]$ be a weight parameter that determines the relative influence of positive and negative seeds.  Let $\tr$ be just as before the ascending sequence of all seed-point distances.  Then the weighted score matrix $C$ can be computed via
+$$ c_{ik} = \lambda \sum_{j \in \mathcal{J}^+} I[m_{ij} \leq k] - (1 - \lambda) \sum_{j \in \mathcal{J}^-} I[m_{ij} \leq k]. $$
+
+We see that the case $\lambda = 1$ is identical to the earlier version of the score that only considers positive seeds, while $\lambda = 0$ only considers negative seeds, and $\lambda = 0.5$ assigns equal weight to both.
+
+***TODO: computation of weighted ranking***
+
+***TODO: could generalize this even further to the case where each seed has a different weight***
+%For convenience, we define $\ell_j$ to be $\lambda$ or $(\lambda - 1)$ depending on whether $s_j$ is a positive or negative seed.  Then 
+%$$ c_{ik} = \sum_{j=1}^{\rmS} \ell_j \, I[m_{ij} \leq k]. $$
+%Let $\tj_{ij}$ be the index of the seed corresponding to $\tm_{ij}$.  In the case that there are no ties among either of the $\rmS$ distance values $\tm_{i:}$ or $\tm_{i':}$, the logic for deciding the inflation ranking between $p_i$ and $p_{i'}$ is as follows:
+
+%If $\tm_{i'j} < \tm_{ij}$ and $\ell_{\tj_{i'j}} = -1$ then $p_i > p_{i'}$, but
+%if $\tm_{i'j} < \tm_{ij}$ and $\ell_{\tj_{i'j}} = 1$ then $p_i < p_{i'}$.
+%On the other hand, if $\tm_{i'j} > \tm_{ij}$ then $p_i > p_{i'}$ if $l_{\tj_{ij}} = 1$ and vice versa. Finally, if $\tm_{i'j} = \tm_{ij}$ and $l_{\tj_{ij}} \ne l_{\tj_{i'j}}$ then
+%$p_i > p_{i'}$ if $l_{\tj_{ij}} > l_{\tj_{i'j}}$ and vice versa.
+
+
+%\paragraph{Inflation Ranking with Binary Labeled Seeds without ties}:\\
+%In the previous section, we assumed that seed $j$ will contribute a value of 1 to
+%$c_{ik}$. We now relax that assumption and instead assume that seed $s_j$
+%contributes a value of $l_j$ to $c_{ik}$. We assume that $l_j$ is either $-1$,
+%or $1$. Therefore $c_{ik} = \sum_{j \in \{1, \ldots, \rmP\}}l_j\mathbb{I}[m_{ij} \le k]$.
+%Let $\ti_{ij}$ equal the index of the seed corresponding to $\tm_{ij}$.
+
+%In the case that there are
+%no ties amongst either of the $\rmS$ distance values $\tm_{i:}$, or $\tm_{i':}$
+%then the logic for deciding the ranking is as follows:
+%If $\tm_{i'j} < \tm_{ij}$ and $l_{\ti_{i'j}} = -1$ then $p_i > p_{i'}$, but
+%if $\tm_{i'j} < \tm_{ij}$ and $l_{\ti_{i'j}} = 1$ then $p_i < p_{i'}$.
+%On the other hand, if $\tm_{i'j} > \tm_{ij}$ then $p_i > p_{i'}$ if $l_{\ti_{ij}} = 1$ and vice versa. Finally, if $\tm_{i'j} = \tm_{ij}$ and $l_{\ti_{ij}} \ne l_{\ti_{i'j}}$ then
+%$p_i > p_{i'}$ if $l_{\ti_{ij}} > l_{\ti_{i'j}}$ and vice versa.
+
+%In case of ties, however, we need to explicitly compute
+%$c_{ik} = \sum_{j \in \{1, \ldots, \rmP\}}l_j\mathbb{I}[m_{ij} \le k]$.
+%In order to efficiently do this summation we create a boolean matrix $G \in \{0, 1\}^{\rmP \times \mathrm{S-1}}$. The \th{ij} value of $G$
+%contains the ``Go on flag'' $g_{ij}$ corresponding to $m_{ij}$ which can be used to
+%efficiently find the indices for summation.
+
+\section{Illustrations on 2D Data}
+In this section we demonstrate the balloon ranking methods on synthetic 2D data\footnote{Toy data courtesy \href{https://github.com/deric/clustering-benchmark}{https://github.com/deric/clustering-benchmark}.}.  Each set of points contains both positive seeds (\textcolor{red}{red}) and negative seeds (\textcolor{blue}{blue}).  The seeds are placed in the center of a grid of linearly discretized points that define the ``test'' points to be ranked.  The inflation and deflation rankings are then computed amongst all of these points using the three settings $\lambda = 0, \, 0.5, \, 1$.  The grid points are then colored based on their ranking, where red is high confidence positive, blue is high confidence negative, and purple is ambiguous.
+
+\begin{figure*}
+    \centering
+    
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{img/long3_balloon_g0.0_0_0.png}
+        \caption{}
+    \end{subfigure}
+    
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{img/square1_balloon_g0.0_0_0.png}
+        \caption{}
+        \label{square1Balloon}
+    \end{subfigure}
+    
+        \caption{Balloon ranking (inflation and deflation) for various settings of $\lambda$.}   
+\end{figure*}
+\begin{figure*}\ContinuedFloat
+
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{img/target_balloon_g0.0_0_0.png}
+        \caption{}
+        \label{targetBalloon}
+    \end{subfigure}
+    
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{img/3-spiral_balloon_g0.0_0_0.png}
+        \caption{}
+    \end{subfigure}
+    
+    \caption{Balloon ranking (inflation and deflation) for various settings of $\lambda$.}
+\end{figure*}
+
+These illustrations reveal the topological behavior of the different balloon ranking schemes.  In particular, the deflation ranking prioritizes distant points more than nearby points, which can lead to some irregularities.  Figure \ref{square1Balloon} shows how this can prove very bad indeed: in the $\lambda = 0.5$ case of deflation, the top-left and bottom-right points will start out with a score of $0$, then as deflation occurs, the removal of positive seeds from the opposite corner will cause the ranking to become more negative, even though there is a cluster of positive seeds in the vicinity!  A similar phenomenon happens in Figure \ref{targetBalloon}.  The deflation method may therefore be quite problematic when the data is multimodal, or if has regions of one kind of seed enmeshed with or encircling regions of the other kind of seed.
+
+Inflation ranking, on the other hand, prioritizes nearby points in a sensible way so that seeds of one color appear to ``radiate'' their color as if it were a diffusion process.  Depending on $\lambda$, seeds of one color or the other will be more responsible for this diffusion.  The $\lambda = 0.5$ setting, in particular, produces very ``accurate'' results on this data set, in that the rankings appear to put high confidence near the respective seed colors, while putting low confidence on points that are roughly equidistant from positive and negative seeds, as well as points that are far from all seeds.
+
+
+
+
+\end{document}  

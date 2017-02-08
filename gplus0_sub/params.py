@@ -11,12 +11,13 @@ nomination_attr_val = 'baltimore, md'
 
 # options
 vn_method = 'randomwalk' # how to perform VN ('embedding', 'randomwalk', 'diffusion')
-verbose = True           # show output
+#verbose = True
+verbosity = 2           # show output
 load_pfa = True         # load pickled PairwiseFreqAnalyzers if they already exist
 load_embeddings = True  # load pickled embeddings if they already exist
 save_info = True        # save off info to .txt files, plots to .png files
 rank_thresh = 100       # rank threshold for top-ranked attribute reports/plots
-nominate_max = 500      # max number of unknown nodes to output in nomination list
+nominate_max = 200      # max number of unknown nodes to output in nomination list
 rng_seed = 123          # RNG seed for replicating experiments (random if None)
 n_jobs = 4              # maximum number of jobs for parallel routines
 
