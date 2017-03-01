@@ -54,9 +54,9 @@ def main():
         vars_for_title = ['info', 'combination_style', 'diffusion_bias', 'score_fusion_style']
     elif (experiment == 'compare'):
         vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'vn_method'}
-        vars_for_title = ['classifier', 'score_fusion_style']
+        vars_for_title = ['classifier', 'deflate', 'combination_style', 'score_fusion_style']
     elif (experiment == 'balloon'):
-        vars_by_distinguisher = {'yfacet' : 'info', 'color' : 'classifier', 'xfacet' : 'lamb'}
+        vars_by_distinguisher = {'color' : 'info', 'linestyle' : 'lamb', 'xfacet' : 'sphere_context', 'yfacet' : 'sphere_content'}
         vars_for_title = ['info', 'classifier', 'use_pca', 'sphere_context', 'sphere_content']
 
     vars_for_title = [var for var in vars_for_title if (var in params)]

@@ -133,29 +133,30 @@ class AttrVNExperimentSuite(PyExperimentSuite):
         self.guess_rate = self.num_pos_in_test / self.num_test
 
         # prepare the algorithm
-        if (pm.vn_method == 'embedding'):
-
-            # construct classifier
-            if (pm.classifier == 'logreg'):
-                self.clf = LogisticRegression()
-            elif (pm.classifier == 'naive_bayes'):
-                self.clf = GaussianNB()
-            elif (pm.classifier == 'randfor'):
-                self.clf = RandomForestClassifier(n_estimators = pm.num_trees, n_jobs = 1)
-            elif (pm.classifier == 'boost'):
-                self.clf = AdaBoostClassifier(n_estimators = pm.num_trees)
-            elif (pm.classifier == 'kde'):
-                self.clf = TwoClassKDE()
-                #train_in = mat[training]
-                #if pm.verbose:
-                #    print("\nCross-validating to optimize KDE bandwidth...")
-                #timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
-            elif (pm.classifier == 'inflate'):
-                self.clf = BalloonNominate(pm.lamb, deflate = False)
-            elif (pm.classifier == 'deflate'):
-                self.clf = BalloonNominate(pm.lamb, deflate = True)
+        if (pm.vn_method in ['embedding', 'balloon']):
+            if (pm.vn_method == 'embedding'):
+                # construct classifier
+                if (pm.classifier == 'logreg'):
+                    self.clf = LogisticRegression()
+                elif (pm.classifier == 'naive_bayes'):
+                    self.clf = GaussianNB()
+                elif (pm.classifier == 'randfor'):
+                    self.clf = RandomForestClassifier(n_estimators = pm.num_trees, n_jobs = 1)
+                elif (pm.classifier == 'boost'):
+                    self.clf = AdaBoostClassifier(n_estimators = pm.num_trees)
+                elif (pm.classifier == 'kde'):
+                    self.clf = TwoClassKDE()
+                    #train_in = mat[training]
+                    #if pm.verbose:
+                    #    print("\nCross-validating to optimize KDE bandwidth...")
+                    #timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
+                else:
+                    raise ValueError("Invalid classifier '%s'." % pm.classifier)
             else:
-                raise ValueError("Invalid classifier '%s'." % pm.classifier)
+                if (pm.deflate):
+                    self.clf = BalloonNominate(pm.lamb, deflate = True)
+                else:
+                    self.clf = BalloonNominate(pm.lamb, deflate = False)
 
             # get embedding features
             if (pm.verbosity >= 1):
@@ -232,10 +233,10 @@ class AttrVNExperimentSuite(PyExperimentSuite):
 
         # perform the vertex nomination
         start_time = time.time()
-        if (pm.vn_method == 'embedding'):
+        if (pm.vn_method in ['embedding', 'balloon']):
             train_in = self.mat[training]
             test_in = self.mat[test]
-            if (self.clf == 'kde'):  # do cross-validation for bandwidth fitting
+            if (pm.classifier == 'kde'):  # do cross-validation for bandwidth fitting
                 self.clf.fit_with_optimal_bandwidth(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds)
             else:
                 self.clf.fit(train_in, train_out)
@@ -280,7 +281,6 @@ class AttrVNExperimentSuite(PyExperimentSuite):
                 F_seed = RowSelectorOperator(self.num_train, self.n, range(self.num_train))
                 F_nonseed = RowSelectorOperator(self.n - self.num_train, self.n, range(self.num_train, self.n))
                 for (j, L) in enumerate(self.sparse_ops):
-                    print(j)
                     Lp = P * L * P.inv()
                     b = -(F_nonseed * (Lp * (F_seed.transpose() * T0)))
                     A = F_nonseed * (Lp * F_nonseed.transpose())
