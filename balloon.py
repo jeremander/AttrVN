@@ -131,7 +131,7 @@ class RankHierarchicalClustering():
         df = df.loc[self.ranked_indices]
         return str(df)
 
-libbln_filename = "balloon/cballoon/balloon.so"
+libbln_filename = "./balloon/cballoon/balloon.so"
 def arr2D_to_ptr(arr):
     return (arr.__array_interface__['data'][0]  + np.arange(arr.shape[0]) * arr.strides[0]).astype(np.uintp)
 
