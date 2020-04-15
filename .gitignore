@@ -73,3 +73,6 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Mypy
+.mypy_cache/

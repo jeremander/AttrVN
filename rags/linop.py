@@ -1,13 +1,10 @@
 """This file contains subclasses of scipy's LinearOperator to represent sparse linear operators with various structure."""
 
-import scipy
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg.interface import _ScaledLinearOperator, _SumLinearOperator, _ProductLinearOperator
-from scipy.sparse import csr_matrix, lil_matrix
+from scipy.sparse import lil_matrix
 from functools import reduce
-
-LINOP_SUBCLASSING = scipy.__version__ >= '0.16.0'
 
 
 class BaseSparseLinearOperator(LinearOperator):
@@ -70,10 +67,7 @@ class SparseLinearOperator(BaseSparseLinearOperator):
     def __init__(self, F):
         """Input must be a sparse matrix or SparseLinearOperator."""
         self.F = F
-        if LINOP_SUBCLASSING:
-            super().__init__(dtype = float, shape = F.shape)
-        else:
-            super().__init__(dtype = float, shape = F.shape, matvec = lambda x : type(self)._matvec(self, x))
+        super().__init__(dtype = float, shape = F.shape)
     def _matvec(self, x):
         return self.F * x
     def _transpose(self):
@@ -111,10 +105,7 @@ class DiagonalLinearOperator(SymmetricSparseLinearOperator):
     def __init__(self, D):
         """D is a 1D array containing the diagonal entries."""
         self.D = D
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = (len(D), len(D)))
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = (len(D), len(D)), matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = (len(D), len(D)))
     def _matvec(self, x):
         return self.D * x
     def __getnewargs__(self):
@@ -125,10 +116,7 @@ class ConstantDiagonalLinearOperator(DiagonalLinearOperator):
     def __init__(self, n, c):
         """n is dimension, c is a constant to be multiplied by the identity matrix."""
         self.c = c
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = (n, n))
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = (n, n), matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = (n, n))
     def _matvec(self, x):
         return self.c * x
     def __getnewargs__(self):
@@ -139,10 +127,7 @@ class RankOneLinearOperator(SparseLinearOperator):
     def __init__(self, u, v):
         assert (len(u) == len(v))
         self.u, self.v = u, v
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(v)))
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(v)), matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = (len(u), len(v)))
     def _transpose(self):
         return RankOneLinearOperator(self.v, self.u)
     def _matvec(self, x):
@@ -154,10 +139,7 @@ class ReplicatedColumnLinearOperator(RankOneLinearOperator):
     """Subclass of RankOneLinearOperator for handling the case u * 1^T, i.e. the matrix whose columns are all u."""
     def __init__(self, u):
         self.u = u
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)))
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)), matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)))
     def _transpose(self):
         return ReplicatedRowLinearOperator(self.u)
     def _matvec(self, x):
@@ -169,10 +151,7 @@ class ReplicatedRowLinearOperator(RankOneLinearOperator):
     """Subclass of RankOneLinearOperator for handling the case 1 * u^T, i.e. the matrix whose rows are all u."""
     def __init__(self, u):
         self.u = u
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)))
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)), matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = (len(u), len(u)))
     def _transpose(self):
         return ReplicatedColumnLinearOperator(self.u)
     def _matvec(self, x):
@@ -188,10 +167,7 @@ class PMILinearOperator(SymmetricSparseLinearOperator):
         self.F, self.Delta, self.u = F, Delta, u
         self.u_prime = self.Delta - self.u
         self.ones = np.ones(n, dtype = float)
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = self.F.shape)
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = self.F.shape, matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = self.F.shape)
     def _matvec(self, x):
         return self.F * x + self.u_prime * np.sum(x) - self.ones * np.dot(self.u, x)
     def __getnewargs__(self):  # for pickling
@@ -203,10 +179,7 @@ class SparseLaplacian(SymmetricSparseLinearOperator):
         assert isinstance(A, SymmetricSparseLinearOperator)
         self.A = A
         self.D = self.A.matvec(np.ones(self.A.shape[1], dtype = float))
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = A.shape)
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = A.shape, matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = A.shape)
     def _matvec(self, x):
         return (self.D * x - self.A.matvec(x))
 
@@ -232,10 +205,7 @@ class SparseDiagonalAddedAdjacencyOperator(SymmetricSparseLinearOperator):
     def __init__(self, A):
         assert isinstance(A, SymmetricSparseLinearOperator)
         self.A = A
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = A.shape)
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = A.shape, matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = A.shape)
         self.D_ratio = self.A._matvec(np.ones(self.A.shape[1], dtype = float)) / self.shape[0]
     def _matvec(self, x):
         return (self.A.matvec(x) + self.D_ratio * x)
@@ -254,10 +224,7 @@ class BlockSparseLinearOperator(SparseLinearOperator):
         self.row_indices = [0] + list(np.cumsum([row[0].shape[0] for row in block_grid]))
         self.column_indices = [0] + list(np.cumsum([block.shape[1] for block in block_grid[0]]))
         self.block_grid = block_grid
-        if LINOP_SUBCLASSING:
-            LinearOperator.__init__(self, dtype = float, shape = shape)
-        else:
-            LinearOperator.__init__(self, dtype = float, shape = shape, matvec = lambda x : type(self)._matvec(self, x))
+        LinearOperator.__init__(self, dtype = float, shape = shape)
     def _matvec(self, x):
         result = np.zeros(self.shape[0], dtype = float)
         for i in range(self.block_grid_shape[0]):

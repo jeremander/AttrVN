@@ -4,23 +4,35 @@
 
     The directory [path] must include a file params.py containing all necessary parameters."""
 
-import sys
-import embed
-import imp
+import importlib.util
 import itertools
-from sklearn.preprocessing import Imputer, StandardScaler
-from sklearn.naive_bayes import GaussianNB
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+from pathlib import Path
+import sys
+import time
+from tqdm import tqdm
+
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.decomposition import PCA
-from kde import TwoClassKDE
-from attr_vn import *
+from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import Imputer, StandardScaler
 
-def main():
+from rags.attr_vn import AttributeAnalyzer, get_elbows
+import rags.embed
+from rags.kde import TwoClassKDE
+from rags.utils import normalize_mat_rows, time_format, timeit
 
-    path = sys.argv[1].strip('/')
-    pm = imp.load_source('params', path + '/params.py')
-    attr_filename = path + '/' + pm.attr_filename
+
+def main(path):
+
+    os.chdir(path)
+    spec = importlib.util.spec_from_file_location('params', 'params.py')
+    pm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pm)
 
     if (pm.rng_seed is not None):
         np.random.seed(pm.rng_seed)
@@ -37,9 +49,9 @@ def main():
 
     # get data frame of numeric features
     if pm.verbose:
-        print("Gathering numeric features...")
+        print('Gathering numeric features...')
     start_time = time.time()
-    num_df = pd.read_csv(attr_filename, sep = ';')
+    num_df = pd.read_csv(pm.attr_filename, sep = ';')
     num_df = num_df[np.vectorize(lambda t : t in set(num_attr_types))(num_df['attributeType'])]
     num_df = num_df.pivot(index = 'node', columns = 'attributeType', values = 'attributeVal')
     num_df = num_df.convert_objects(convert_numeric = True)
@@ -48,11 +60,11 @@ def main():
 
     # stack feature vectors, projecting to sphere if desired
     if pm.verbose:
-        print("\nStacking feature vectors...")
+        print('Stacking feature vectors...')
     start_time = time.time()
     mats = []
     # get embedding features
-    (context_features, text_attr_features_by_type) = embed.main()
+    (context_features, text_attr_features_by_type) = rags.embed.main(path)
     embedding_mats = []
     if pm.use_context:
         if pm.sphere_context:
@@ -80,7 +92,7 @@ def main():
         ncomps = mat.shape[1] if (pm.max_eig_pca is None) else min(pm.max_eig_pca, mat.shape[1])
         pca = PCA(n_components = ncomps, whiten = pm.whiten)
         if pm.verbose:
-            print("\nPerforming PCA on feature matrix...")
+            print('Performing PCA on feature matrix...')
         mat = timeit(pca.fit_transform)(mat)
         sq_sing_vals = pca.explained_variance_
         if (pm.which_elbow > 0):
@@ -93,19 +105,19 @@ def main():
     # identify seeds
     n = mat.shape[0]
     if pm.verbose:
-        print("\nCreating AttributeAnalyzer...")
-    a = timeit(AttributeAnalyzer, pm.verbose)(attr_filename, n, text_attr_types + [pm.nomination_attr_type])
+        print('Creating AttributeAnalyzer...')
+    a = timeit(AttributeAnalyzer, pm.verbose)(pm.attr_filename, n, text_attr_types + [pm.nomination_attr_type])
     ind = a.get_attribute_indicator(pm.nomination_attr_val, pm.nomination_attr_type)
     true_seeds, false_seeds = ind[ind == 1].index, ind[ind == 0].index
     num_true_seeds, num_false_seeds = len(true_seeds), len(false_seeds)
     training = list(ind[ind >= 0].index)
     assert ((num_true_seeds > 1) and (num_false_seeds > 1))  # can't handle this otherwise, yet
     if pm.verbose:
-        print("\n%d total seeds (%d positive, %d negative)" % (num_true_seeds + num_false_seeds, num_true_seeds, num_false_seeds))
+        print(f'{num_true_seeds + num_false_seeds} total seeds ({num_true_seeds} positive, {num_false_seeds} negative)')
 
     # construct classifier
     if (pm.classifier == 'logreg'):
-        clf = LogisticRegression()
+        clf = LogisticRegression(solver = 'lbfgs')
     elif (pm.classifier == 'naive_bayes'):
         clf = GaussianNB()
     elif (pm.classifier == 'randfor'):
@@ -117,10 +129,10 @@ def main():
         train_in = mat[training]
         train_out = ind[training]
         if pm.verbose:
-            print("\nCross-validating to optimize KDE bandwidth...")
+            print('Cross-validating to optimize KDE bandwidth...')
         timeit(clf.fit_with_optimal_bandwidth)(train_in, train_out, gridsize = pm.kde_cv_gridsize, dynamic_range = pm.kde_cv_dynamic_range, cv = pm.kde_cv_folds, verbose = int(pm.verbose), n_jobs = pm.n_jobs)
     else:
-        raise ValueError("Invalid classifier '%s'." % pm.classifier)
+        raise ValueError(f'Invalid classifier {pm.classifier!r}')
 
     # cross-validate
     if (pm.cv_max > 0):
@@ -135,8 +147,8 @@ def main():
         guess_rate = num_true / num_cv_seeds
         training_set = set(training)
         if pm.verbose:
-            print("\nCross-validating %d seeds (%d positive, %d negative) with %s = %s..." % (num_cv_seeds, num_true, num_cv_seeds - num_true, pm.nomination_attr_type, pm.nomination_attr_val))
-        for (i, seed) in enumerate(cv_seeds):
+            print(f'Cross-validating {num_cv_seeds} seeds ({num_true} positive, {num_cv_seeds - num_true} negative) with {pm.nomination_attr_type} = {pm.nomination_attr_val}...')
+        for (i, seed) in enumerate(tqdm(cv_seeds)):
             training_set.remove(seed)  # remove sample
             cv_train = list(training_set)
             train_in = mat[cv_train]
@@ -159,12 +171,12 @@ def main():
         AP = np.mean(cumulative_prec)  # average precision
         if pm.verbose:
             print(time_format(time.time() - start_time))
-            print("\nguess rate = %5f" % guess_rate)
-            print("average precision = %5f" % AP)
-            print("cumulative precisions:")
+            print(f'guess rate = {guess_rate:5f}')
+            print(f'average precision = {AP:5f}')
+            print('cumulative precisions:')
             print(cumulative_prec)
         if pm.save_info:
-            cv_df.to_csv(path + '/%s_%s_cv_nomination.txt' % (pm.nomination_attr_type, pm.nomination_attr_val), index = False, sep = '\t')
+            cv_df.to_csv(f'{pm.nomination_attr_type}_{pm.nomination_attr_val}_cv_nomination.txt', index = False, sep = '\t')
             plt.figure()
             plt.plot(cumulative_prec, color = 'blue', linewidth = 2)
             plt.axhline(y = guess_rate, color = 'black', linewidth = 2, linestyle = 'dashed')
@@ -172,8 +184,8 @@ def main():
             plt.xlabel('rank')
             plt.ylabel('prec')
             plt.ylim((0, min(1.0, 1.1 * cumulative_prec.max())))
-            plt.title('Cumulative precision of cross-validated seeds\nAP = %5f' % AP, fontweight = 'bold')
-            plt.savefig(path + '/%s_%s_cv_prec.png' % (pm.nomination_attr_type, pm.nomination_attr_val))
+            plt.title(f'Cumulative precision of cross-validated seeds\nAP = {AP:5f}', fontweight = 'bold')
+            plt.savefig(f'{pm.nomination_attr_type}_{pm.nomination_attr_val}_cv_prec.png')
 
     # nominate the unknown nodes
     start_time = time.time()
@@ -186,7 +198,7 @@ def main():
     test_in = mat[test]
     test_probs = clf.predict_proba(test_in)[:, 1]
     if pm.verbose:
-        print(time_format(time.time() - start_time))    
+        print(time_format(time.time() - start_time))
     nom_df = pd.DataFrame(columns = ['node', 'prob'] + attr_types)
     nom_df['node'] = test
     nom_df['prob'] = test_probs
@@ -197,10 +209,12 @@ def main():
         vals = num_df[attr_type]
         nom_df[attr_type] = ['' if np.isnan(vals[node]) else str(vals[node]) for node in test]
     nom_df = nom_df.sort_values(by = 'prob', ascending = False)
-    nom_df[:pm.nominate_max].to_csv(path + '/%s_%s_nomination.out' % (pm.nomination_attr_type, pm.nomination_attr_val), index = False, sep = '\t')
+    output_filename = f'{pm.nomination_attr_type}_{pm.nomination_attr_val}_nomination.out'
+    nom_df[:pm.nominate_max].to_csv(output_filename, index = False, sep = '\t')
     if pm.verbose:
-        print("\nSaved results to %s/%s_%s_nomination.out" % (path, pm.nomination_attr_type, pm.nomination_attr_val))
+        print(f'Saved results to {output_filename}')
 
 
 if __name__ == "__main__":
-    main()
+    path = Path(sys.argv[1]).resolve()
+    main(path)

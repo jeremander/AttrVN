@@ -1,12 +1,12 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from importlib import reload
 from collections import defaultdict
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from scipy.sparse.linalg import eigsh
-from scipy.sparse import *
-from linop import *
-from utils import *
+from scipy.sparse import coo_matrix, csr_matrix, diags, dok_matrix
+
+from rags.linop import CollapseOperator, PMILinearOperator, SparseDiagonalAddedAdjacencyOperator, SparseNormalizedLaplacian, SparseRegularizedNormalizedLaplacian, SymmetricSparseLinearOperator
+
 
 def safe_divide(num, den):
     """Floating point division, with the convention that 0 / 0 = 0, (+/-)c / 0 = (+/-)inf for c > 0."""
@@ -24,8 +24,7 @@ def symmetrize_sparse_matrix(M):
 def edgelist_to_sparse_adjacency_operator(filename, verbose = True):
     """Takes a filename of an undirected edge list (space-separated pairs of vertices indexed from 0 to n - 1)."""
     if verbose:
-        print("\nLoading edges from '%s'..." % filename)
-    edges_dict = defaultdict(list)
+        print(f'Loading edges from {filename}')
     rows, cols = [], []
     num_edges = 0
     n = -1
@@ -48,7 +47,7 @@ def embed_symmetric_operator(A, embedding = 'adj', k = 50, tol = None, verbose =
     tol = 1.0 / n if (tol is None) else tol
     if verbose:
         matrix_type = 'adjacency' if (embedding == 'adj') else ('diagonal-added adjacency' if (embedding == 'diag+adj') else ('normalized Laplacian' if (embedding == 'normlap') else 'regularized normalized Laplacian'))
-        print("\nComputing k = %d eigenvectors of %d x %d %s matrix..." % (k, n, n, matrix_type))
+        print(f'Computing k = {k} eigenvectors of {n} x {n} {matrix_type} matrix...')
     if (embedding == 'adj'):
         (eigvals, features) = eigsh(A, k = k, tol = tol)
         features = np.sqrt(np.abs(eigvals)) * features  # scale the feature columns by the sqrt of the eigenvalues
@@ -91,7 +90,7 @@ def scree_plot(eigvals, elbow = None, show = True, filename = None):
     plt.title('Scree plot of eigenvalues')
     plt.xlabel('rank', labelpad = 10)
     plt.ylabel('abs(eigenvalue)', labelpad = 15)
-    plt.ylim(ymin = 0)
+    plt.ylim(bottom = 0)
     if filename:
         plt.savefig(filename)
     if show:
@@ -101,7 +100,7 @@ def scree_plot(eigvals, elbow = None, show = True, filename = None):
 class PairwiseFreqAnalyzer(object):
     """Manages statistics related to unordered pairwise frequencies, such as pointwise mutual information. Represents the pairwise frequencies as a sparse matrix of counts of each pair using the DOK (dictionary of keys) format, then converts it to CSR (compressed sparse row) format."""
     def __init__(self, vocab):
-        """Constructs PairwiseFreqAnalyzer object with a list of vocab. Creates a mapping from vocab to indices for the sparse matrix representation.""" 
+        """Constructs PairwiseFreqAnalyzer object with a list of vocab. Creates a mapping from vocab to indices for the sparse matrix representation."""
         self.vocab = vocab  # the canonical vocab list (in order of matrix indices)
         self.vocab_indices = dict((v, i) for (i, v) in enumerate(self.vocab))  # maps vocab items to canonical indices
         self.vocab_freqs = dict((v, 0) for v in self.vocab)  # counts number of edges seen with each vocab word in it
@@ -245,7 +244,7 @@ class AttributeAnalyzer(object):
         plots_for_legend = []
         for (i, t) in enumerate(self.attr_types):
             afdf_for_type = afdf[afdf['type'] == t]
-            plots_for_legend.append(ax1.plot(afdf_for_type['rank'], np.log10(afdf_for_type['freq']), color = colors[i], linewidth = 2)[0])
+            plots_for_legend.append(ax1.plot(afdf_for_type['rank'], np.log10(afdf_for_type['freq'].astype(float)), color = colors[i], linewidth = 2)[0])
             ax2.plot(afdf_for_type['rank'], afdf_for_type['cumulative %'], color = colors[i], linewidth = 2)
         ax1.set_title('Attribute frequencies by type', fontweight = 'bold')
         ax2.set_xlabel('rank')
@@ -301,7 +300,7 @@ class AttributeAnalyzer(object):
     def make_pairwise_freq_analyzer(self, attr_type, edges_filename, verbose = True):
         """Makes PairwiseFreqAnalyzer object for a given attribute type using edges from a given edge list filename. The PairwiseFreqAnalyzer object can be used to perform statistics on pairwise attribute counts and to compute pairwise similarity matrices between attributes."""
         if verbose:
-            print("\nMaking PairwiseFreqAnalyzer for attribute type '%s' using edges from file '%s'..." % (attr_type, edges_filename))
+            print(f'Making PairwiseFreqAnalyzer for attribute type {attr_type!r} using edges from file {edges_filename}')
         attrs_by_node = self.attrs_by_node_by_type[attr_type]
         vocab = set()
         for i in range(self.num_nodes):
@@ -334,7 +333,7 @@ class AttributeAnalyzer(object):
         """Given a PairwiseFreqAnalyzer for an attribute type, creates the uncollapsed SparseLinearOperator representing the attribute similarities. In this operator, node similarities are replicates of their corresponding attribute similarities (or the average of these, if multiple attributes occur). sim can be 'PMIs', 'NPMI1s', or 'conditional_prob'."""
         attrs_by_node = self.attrs_by_node_by_type[attr_type]
         if verbose:
-            print("\nMaking uncollapsed %s operator..." % sim)
+            print(f'Making uncollapsed {sim} operator...')
         attr_block = pfa.to_sparse_sim_operator(sim, delta)
         mapping = []
         for i in range(self.num_nodes):
